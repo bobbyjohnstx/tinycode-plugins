@@ -91,13 +91,13 @@ export function createQuayClient(registryUrl: string, apiToken?: string): QuayCl
     },
 
     async listTags(namespace: string, name: string): Promise<QuayTagList> {
-      const response = await api.get<QuayTagList>(`/api/v1/repository/${namespace}/${name}/tag/`)
+      const response = await api.get<QuayTagList>(`/api/v1/repository/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/tag/`)
       return response.data
     },
 
     async getManifest(namespace: string, name: string, digest: string): Promise<QuayManifestInfo> {
       const response = await api.get<QuayManifestInfo>(
-        `/api/v1/repository/${namespace}/${name}/manifest/${digest}`,
+        `/api/v1/repository/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/manifest/${encodeURIComponent(digest)}`,
       )
       return response.data
     },
@@ -108,14 +108,14 @@ export function createQuayClient(registryUrl: string, apiToken?: string): QuayCl
       digest: string,
     ): Promise<QuaySecurityResult> {
       const response = await api.get<QuaySecurityResult>(
-        `/api/v1/repository/${namespace}/${name}/manifest/${digest}/security`,
+        `/api/v1/repository/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/manifest/${encodeURIComponent(digest)}/security`,
       )
       return response.data
     },
 
     async getLabels(namespace: string, name: string, digest: string): Promise<QuayLabelList> {
       const response = await api.get<QuayLabelList>(
-        `/api/v1/repository/${namespace}/${name}/manifest/${digest}/labels`,
+        `/api/v1/repository/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/manifest/${encodeURIComponent(digest)}/labels`,
       )
       return response.data
     },

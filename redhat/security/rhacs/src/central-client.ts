@@ -133,7 +133,7 @@ export function createCentralClient(centralUrl: string, apiToken: string): Centr
     },
 
     async getDeploymentRisk(deploymentId: string): Promise<RiskResult> {
-      const response = await api.get<RiskResult>(`/v1/deployments/${deploymentId}/risk`)
+      const response = await api.get<RiskResult>(`/v1/deployments/${encodeURIComponent(deploymentId)}/risk`)
       return response.data
     },
 
@@ -144,7 +144,7 @@ export function createCentralClient(centralUrl: string, apiToken: string): Centr
 
     async runComplianceScan(scanConfigId: string): Promise<ComplianceScanResult> {
       const response = await api.post<ComplianceScanResult>(
-        `/v2/compliance/scan/configurations/${scanConfigId}/run`,
+        `/v2/compliance/scan/configurations/${encodeURIComponent(scanConfigId)}/run`,
         {},
       )
       return response.data
