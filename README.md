@@ -23,7 +23,7 @@ Most plugins work out of the box with `oc` already logged in. Plugins that conne
 | Plugin | Required Options | Optional Options |
 |--------|-----------------|------------------|
 | ocp-cluster-ops | — | `consoleOfflineToken`, `clusterId` (enables Insights tools) |
-| obs-metrics | `prometheusUrl` | `alertManagerUrl`, `token` |
+| obs-metrics | `prometheusUrl` | `alertManagerUrl`, `token`, `namespace` |
 | obs-logging | — | `lokiUrl`, `tempoUrl`, `token` |
 | rhacs | `centralUrl` | `apiToken` |
 | lightwell | — | `serviceAccountToken` |
@@ -34,7 +34,7 @@ Most plugins work out of the box with `oc` already logged in. Plugins that conne
 | mlflow-tools | `mlflowUrl` | — |
 | rhoai-pipelines | `pipelinesUrl` | `namespace`, `token` |
 | rhoai-eval-trustyai | — | `evalApiUrl`, `trustyaiUrl`, `namespace`, `token` |
-| satellite-lightspeed | `satelliteUrl` | `username`, `password` |
+| satellite-lightspeed | `satelliteUrl` | `token` |
 | rhdp-provisioner | `consoleOfflineToken` | `rhdpApiUrl` |
 
 Plugins not listed above require no configuration. When a plugin with optional configuration is used without it, the unconfigured tools return a helpful message explaining what to set.
@@ -470,7 +470,6 @@ All plugins depend on `tinycode-plugin-redhat-shared`, which provides:
 
 - **OC Client** — typed wrapper around `oc` CLI (get, describe, logs, apply, raw)
 - **API Client** — HTTP client with token injection and 401 retry
-- **Token Manager** — singleton auth token management across plugins (authenticate once via ocp-oauth, all plugins reuse the token)
 - **Console Auth** — SSO token exchange for console.redhat.com APIs
 - **PromQL Client** — Prometheus/Thanos query and alert management
 - **Local Search Index** — file-based full-text search for offline content
@@ -486,7 +485,7 @@ All plugins depend on `tinycode-plugin-redhat-shared`, which provides:
 # Install dependencies
 bun install
 
-# Run all tests (~687 tests across 26 packages)
+# Run all tests (~695 tests across 26 packages)
 bun test --recursive
 
 # Type check all packages
