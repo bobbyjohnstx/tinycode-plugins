@@ -2,6 +2,8 @@ import type { Hooks, PluginModule } from "tinycode-plugin"
 import { z } from "zod"
 import { createApiClient } from "tinycode-plugin-redhat-shared/api"
 import { createMlflowClient } from "tinycode-plugin-redhat-shared/mlflow"
+import type { LastRunInfo } from "./read-side"
+import { fetchLastRun, createSystemTransformHook } from "./read-side"
 
 const optionsSchema = z
   .object({
@@ -34,10 +36,17 @@ export default {
     let eventCount = 0
     let startTime = 0
     let _modelId: string | undefined
+    const lastRunRef: { current: LastRunInfo | null } = { current: null }
 
     return {
       "session.start": async (event, _output) => {
         try {
+          try {
+            lastRunRef.current = await fetchLastRun(api, experimentName)
+          } catch {
+            // read-side is best-effort
+          }
+
           let experimentId = await mlflow.getExperimentByName(experimentName)
           if (!experimentId) {
             experimentId = await mlflow.createExperiment(experimentName)
@@ -102,6 +111,9 @@ export default {
 
         runId = undefined
       },
+
+      "experimental.chat.system.transform":
+        createSystemTransformHook(lastRunRef),
     }
   },
 } satisfies PluginModule

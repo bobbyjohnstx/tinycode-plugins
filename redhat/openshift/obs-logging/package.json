@@ -1,0 +1,26 @@
+{
+  "name": "tinycode-plugin-obs-logging",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Observability logging and tracing tools using Loki, Tempo, and Network Observability",
+  "engines": {
+    "tinycode-plugin": ">=1"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "tinycode-plugin": "^1.18.0",
+    "tinycode-plugin-redhat-shared": "workspace:*",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.7.0"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  }
+}
