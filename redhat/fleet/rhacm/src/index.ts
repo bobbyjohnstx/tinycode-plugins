@@ -1,6 +1,7 @@
-import type { Hooks, PluginInput, PluginModule, ToolContext, ToolDefinition } from "tinycode-plugin"
+import type { Hooks, PluginModule, ToolContext, ToolDefinition } from "tinycode-plugin"
 import { z } from "zod"
 import { createOcClient } from "tinycode-plugin-redhat-shared/oc"
+import type { OcClient } from "tinycode-plugin-redhat-shared/oc"
 import { createPromQLClient } from "tinycode-plugin-redhat-shared/promql"
 import { createAcmClient, type AcmClient } from "./acm-client"
 
@@ -18,7 +19,7 @@ const optionsSchema = z
 
 export function createAcmTools(
   client: AcmClient,
-  $: PluginInput["$"],
+  oc: OcClient,
 ): Record<string, ToolDefinition> {
   return {
     acm_clusters: {
@@ -175,7 +176,7 @@ export function createAcmTools(
             always: [],
             metadata: { yaml: args.yaml },
           })
-          const result = await $`echo ${args.yaml} | oc apply -f -`.text()
+          const result = await oc.apply(args.yaml)
           return result || "Applied successfully"
         } catch (error) {
           return `Error deploying application: ${error instanceof Error ? error.message : String(error)}`
@@ -238,7 +239,7 @@ export default {
     const parsed = optionsSchema.safeParse(options)
     const opts = parsed.success ? parsed.data : undefined
 
-    const tools = createAcmTools(client, input.$)
+    const tools = createAcmTools(client, oc)
 
     if (opts?.thanosUrl && opts.token) {
       tools.acm_observability = createObservabilityTool(

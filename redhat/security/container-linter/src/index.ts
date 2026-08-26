@@ -15,32 +15,43 @@ type BaseSuggestion = {
   rationale: string
 }
 
+const UBI_VERSIONS = {
+  ubi: "9.5",
+  ubiMinimal: "9.5",
+  ubiMicro: "9.5",
+  openjdk21Runtime: "1.20",
+  python312: "1",
+  nodejs22: "1",
+} as const
+
+const REGISTRY = "registry.access.redhat.com/ubi9"
+
 const BASE_IMAGE_LOOKUP: Array<{ keywords: string[]; suggestion: BaseSuggestion }> = [
   {
     keywords: ["java", "quarkus"],
     suggestion: {
-      image: "registry.access.redhat.com/ubi9/openjdk-21-runtime:1.20",
+      image: `${REGISTRY}/openjdk-21-runtime:${UBI_VERSIONS.openjdk21Runtime}`,
       rationale: "OpenJDK 21 runtime optimized for Java/Quarkus workloads on UBI 9.",
     },
   },
   {
     keywords: ["python"],
     suggestion: {
-      image: "registry.access.redhat.com/ubi9/python-312:1",
+      image: `${REGISTRY}/python-312:${UBI_VERSIONS.python312}`,
       rationale: "Python 3.12 runtime on UBI 9 with pip and virtualenv pre-installed.",
     },
   },
   {
     keywords: ["node", "nodejs"],
     suggestion: {
-      image: "registry.access.redhat.com/ubi9/nodejs-22:1",
+      image: `${REGISTRY}/nodejs-22:${UBI_VERSIONS.nodejs22}`,
       rationale: "Node.js 22 runtime on UBI 9 for server-side JavaScript workloads.",
     },
   },
   {
     keywords: ["go", "golang"],
     suggestion: {
-      image: "registry.access.redhat.com/ubi9/ubi-minimal:9.5",
+      image: `${REGISTRY}/ubi-minimal:${UBI_VERSIONS.ubiMinimal}`,
       rationale:
         "Go compiles to static binaries. Use ubi-minimal as a lightweight runtime base.",
     },
@@ -48,14 +59,14 @@ const BASE_IMAGE_LOOKUP: Array<{ keywords: string[]; suggestion: BaseSuggestion 
   {
     keywords: ["minimal"],
     suggestion: {
-      image: "registry.access.redhat.com/ubi9/ubi-minimal:9.5",
+      image: `${REGISTRY}/ubi-minimal:${UBI_VERSIONS.ubiMinimal}`,
       rationale: "Minimal UBI image with microdnf. Suitable for compiled or minimal apps.",
     },
   },
   {
     keywords: ["micro"],
     suggestion: {
-      image: "registry.access.redhat.com/ubi9/ubi-micro:9.5",
+      image: `${REGISTRY}/ubi-micro:${UBI_VERSIONS.ubiMicro}`,
       rationale:
         "Smallest UBI image with no package manager. Best for static binaries.",
     },
@@ -63,7 +74,7 @@ const BASE_IMAGE_LOOKUP: Array<{ keywords: string[]; suggestion: BaseSuggestion 
 ]
 
 const DEFAULT_SUGGESTION: BaseSuggestion = {
-  image: "registry.access.redhat.com/ubi9/ubi:9.5",
+  image: `${REGISTRY}/ubi:${UBI_VERSIONS.ubi}`,
   rationale: "General-purpose UBI 9 base image with dnf and full RHEL userspace.",
 }
 

@@ -1,62 +1,9 @@
 import { describe, it, expect } from "bun:test"
-import type { PluginInput } from "tinycode-plugin"
-import { createMockShell } from "tinycode-plugin-redhat-shared/test-utils"
+import {
+  createMockShell,
+  createMockInput,
+} from "tinycode-plugin-redhat-shared/test-utils"
 import plugin from "../src/index"
-
-function createMockInput(shell?: PluginInput["$"]): PluginInput {
-  const defaultShell = (() => {
-    const s = ((
-      _strings: TemplateStringsArray,
-      ..._expressions: unknown[]
-    ) => {
-      const result = {
-        stdout: Buffer.from(""),
-        stderr: Buffer.from(""),
-        exitCode: 0,
-        text: () => "",
-        json: () => ({}),
-        arrayBuffer: () => new ArrayBuffer(0),
-        bytes: () => new Uint8Array(0),
-        blob: () => new Blob(),
-      }
-      const promise = Promise.resolve(result)
-      const chainable: Record<string, unknown> = {}
-      Object.assign(chainable, {
-        then: promise.then.bind(promise),
-        catch: promise.catch.bind(promise),
-        finally: promise.finally.bind(promise),
-        quiet: () => chainable,
-        nothrow: () => chainable,
-        cwd: () => chainable,
-        env: () => chainable,
-        throws: () => chainable,
-        text: () => Promise.resolve(""),
-        json: () => Promise.resolve({}),
-      })
-      return chainable
-    }) as unknown as PluginInput["$"]
-    s.braces = () => []
-    s.escape = (input: string) => input
-    s.env = () => s
-    s.cwd = () => s
-    s.nothrow = () => s
-    s.throws = () => s
-    return s
-  })()
-
-  return {
-    client: {} as PluginInput["client"],
-    project: {
-      id: "test-project",
-      worktree: "/tmp/test",
-      time: { created: Date.now() },
-    },
-    directory: "/tmp/test",
-    worktree: "/tmp/test",
-    serverUrl: new URL("http://localhost:4096"),
-    $: shell ?? defaultShell,
-  }
-}
 
 describe("tinycode-plugin-ocp-oauth", () => {
   it("loads without error", async () => {

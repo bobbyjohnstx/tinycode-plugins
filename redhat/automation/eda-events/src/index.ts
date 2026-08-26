@@ -94,9 +94,20 @@ export default {
 
     const endpoint = parsed.edaEndpoint
     const allowedEvents = parsed.events
-    const patterns = (parsed.sensitivePatterns ?? []).map(
-      (p) => new RegExp(p),
-    )
+
+    const DEFAULT_SENSITIVE_PATTERNS = [
+      "^sha256~",
+      "^sk-",
+      "^ghp_",
+      "^ghs_",
+      "^glpat-",
+      "^Bearer\\s+",
+      "^token-",
+      "^eyJ[A-Za-z0-9_-]{10,}",
+    ]
+
+    const rawPatterns = parsed.sensitivePatterns ?? DEFAULT_SENSITIVE_PATTERNS
+    const patterns = rawPatterns.map((p) => new RegExp(p))
 
     const { fire, stats } = createEventSender(endpoint, patterns, allowedEvents)
 
