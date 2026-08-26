@@ -1,6 +1,5 @@
 import type { PluginModule } from "tinycode-plugin"
 import { z } from "zod"
-import { tokenManager } from "tinycode-plugin-redhat-shared/auth"
 
 const schema = z
   .object({
@@ -62,12 +61,6 @@ export default {
               if (result.exitCode !== 0) {
                 return { type: "failed" as const }
               }
-
-              tokenManager.setToken(server, {
-                token,
-                source: "oauth",
-                server,
-              })
 
               return {
                 type: "success" as const,

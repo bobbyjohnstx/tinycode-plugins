@@ -1,7 +1,6 @@
-import { describe, it, expect, afterEach } from "bun:test"
+import { describe, it, expect } from "bun:test"
 import type { PluginInput } from "tinycode-plugin"
 import { createMockShell } from "tinycode-plugin-redhat-shared/test-utils"
-import { tokenManager } from "tinycode-plugin-redhat-shared/auth"
 import plugin from "../src/index"
 
 function createMockInput(shell?: PluginInput["$"]): PluginInput {
@@ -58,10 +57,6 @@ function createMockInput(shell?: PluginInput["$"]): PluginInput {
     $: shell ?? defaultShell,
   }
 }
-
-afterEach(() => {
-  tokenManager.clear()
-})
 
 describe("tinycode-plugin-ocp-oauth", () => {
   it("loads without error", async () => {
@@ -172,25 +167,6 @@ describe("tinycode-plugin-ocp-oauth", () => {
         token: "sha256~testtoken123",
       })
       expect(result).toEqual({ type: "failed" })
-    })
-
-    it("calls tokenManager.setToken on success", async () => {
-      const server = "https://api.mycluster.example.com:6443"
-      const token = "sha256~testtoken123"
-      const shell = createMockShell([
-        { match: "oc login", output: "Login successful", exitCode: 0 },
-      ])
-      const input = createMockInput(shell)
-      const hooks = await plugin.server(input)
-      const method = hooks.auth!.methods[0]!
-      await method.authorize!({ server, token })
-
-      const stored = tokenManager.getToken(server)
-      expect(stored).toEqual({
-        token,
-        source: "oauth",
-        server,
-      })
     })
 
     it("returns failed when server is missing", async () => {

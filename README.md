@@ -23,19 +23,19 @@ Most plugins work out of the box with `oc` already logged in. Plugins that conne
 | Plugin | Required Options | Optional Options |
 |--------|-----------------|------------------|
 | ocp-cluster-ops | — | `consoleOfflineToken`, `clusterId` (enables Insights tools) |
-| obs-metrics | `prometheusUrl` | — |
-| obs-logging | `lokiUrl` | `tempoUrl`, `networkObsUrl`, `grafanaUrl` |
-| rhacs | `centralUrl`, `apiToken` | — |
-| lightwell | `lightwellUrl` | — |
-| aap-bridge | `controllerUrl`, `controllerToken` | `hubUrl`, `hubToken` |
-| rhacm | — | `thanosUrl` (enables federated PromQL) |
-| rhoai-models | — | `consoleOfflineToken` (enables Developer Sandbox tools) |
-| rhoai-mcp-bridge | `mcpServerUrl` | — |
+| obs-metrics | `prometheusUrl` | `alertManagerUrl`, `token` |
+| obs-logging | — | `lokiUrl`, `tempoUrl`, `token` |
+| rhacs | `centralUrl` | `apiToken` |
+| lightwell | — | `serviceAccountToken` |
+| aap-bridge | `controllerUrl` | `oauthToken` |
+| rhacm | — | `hubUrl`, `thanosUrl`, `token` |
+| rhoai-models | — | `namespace`, `routeHost`, `consoleOfflineToken` |
+| rhoai-mcp-bridge | `mcpServerUrl` | `oauthToken` |
 | mlflow-tools | `mlflowUrl` | — |
-| rhoai-pipelines | `pipelinesUrl` | — |
-| rhoai-eval-trustyai | — | `evalApiUrl`, `trustyaiUrl`, `namespace` |
-| satellite-lightspeed | `satelliteUrl`, `satelliteToken` | — |
-| rhdp-provisioner | `consoleOfflineToken` | — |
+| rhoai-pipelines | `pipelinesUrl` | `namespace`, `token` |
+| rhoai-eval-trustyai | — | `evalApiUrl`, `trustyaiUrl`, `namespace`, `token` |
+| satellite-lightspeed | `satelliteUrl` | `username`, `password` |
+| rhdp-provisioner | `consoleOfflineToken` | `rhdpApiUrl` |
 
 Plugins not listed above require no configuration. When a plugin with optional configuration is used without it, the unconfigured tools return a helpful message explaining what to set.
 
@@ -155,6 +155,8 @@ Plugins not listed above require no configuration. When a plugin with optional c
 - `aap_list_inventories` — List inventories with host counts
 - `aap_hub_search` — Search Automation Hub for certified collections
 - `aap_lint_playbook` — Lint an Ansible playbook for best practices and errors
+
+> **Security note:** The `shell.env` hook sets `CONTROLLER_HOST` and `CONTROLLER_OAUTH_TOKEN` as environment variables for ansible-navigator compatibility. This makes the token visible to any subprocess spawned during the session. Use short-lived OAuth tokens and rotate them regularly.
 
 **Events (eda-events):**
 - `tinycode.image.built` — docker/podman build detected
