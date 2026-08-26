@@ -2,7 +2,7 @@
 
 Red Hat product integration plugins for [tinycode](https://github.com/bobbyjohnstx/tinycode), a local-LLM coding assistant.
 
-This monorepo contains 13 plugins organized by Red Hat product bundle, plus a shared utilities package. Each plugin extends tinycode with tools, providers, or lifecycle hooks that connect your coding session to Red Hat infrastructure.
+This monorepo contains 25 plugins organized by Red Hat product bundle, plus a shared utilities package. Each plugin extends tinycode with tools, providers, or lifecycle hooks that connect your coding session to Red Hat infrastructure.
 
 ## Quick Start
 
@@ -14,7 +14,30 @@ tinycode plugin add tinycode-plugin-ocp-cluster-ops
 tinycode plugin add tinycode-plugin-ocp-oauth tinycode-plugin-ocp-context tinycode-plugin-ocp-cluster-ops
 ```
 
-All plugins that connect to OpenShift-hosted services benefit from installing `tinycode-plugin-ocp-oauth` — authenticate once, and every plugin reuses the token.
+All plugins that connect to OpenShift-hosted services require `tinycode-plugin-ocp-oauth` — it provides the `oc login` auth hook that every OCP-connected plugin depends on. Authenticate once, and every plugin reuses the token.
+
+## Configuration
+
+Most plugins work out of the box with `oc` already logged in. Plugins that connect to external APIs require options in your tinycode config:
+
+| Plugin | Required Options | Optional Options |
+|--------|-----------------|------------------|
+| ocp-cluster-ops | — | `consoleOfflineToken`, `clusterId` (enables Insights tools) |
+| obs-metrics | `prometheusUrl` | — |
+| obs-logging | `lokiUrl` | `tempoUrl`, `networkObsUrl`, `grafanaUrl` |
+| rhacs | `centralUrl`, `apiToken` | — |
+| lightwell | `lightwellUrl` | — |
+| aap-bridge | `controllerUrl`, `controllerToken` | `hubUrl`, `hubToken` |
+| rhacm | — | `thanosUrl` (enables federated PromQL) |
+| rhoai-models | — | `consoleOfflineToken` (enables Developer Sandbox tools) |
+| rhoai-mcp-bridge | `mcpServerUrl` | — |
+| mlflow-tools | `mlflowUrl` | — |
+| rhoai-pipelines | `pipelinesUrl` | — |
+| rhoai-eval-trustyai | — | `evalApiUrl`, `trustyaiUrl`, `namespace` |
+| satellite-lightspeed | `satelliteUrl`, `satelliteToken` | — |
+| rhdp-provisioner | `consoleOfflineToken` | — |
+
+Plugins not listed above require no configuration. When a plugin with optional configuration is used without it, the unconfigured tools return a helpful message explaining what to set.
 
 ## Plugins
 
@@ -23,8 +46,10 @@ All plugins that connect to OpenShift-hosted services benefit from installing `t
 | Package | Description | Hooks |
 |---------|-------------|-------|
 | **tinycode-plugin-ocp-oauth** | Shared OpenShift authentication. API token login via `oc login`, sets `OC_EDITOR=cat`. Authenticate once for all OCP-hosted plugins. | `auth`, `shell.env` |
-| **tinycode-plugin-ocp-context** | Injects cluster metadata (version, nodes, namespace, operators) into the system prompt on session start. The LLM knows what cluster it's targeting without being told. | `session.start`, `system.transform` |
-| **tinycode-plugin-ocp-cluster-ops** | Direct cluster visibility — get resources, tail logs, describe objects, view events, check cluster health, apply manifests (with confirmation). | `tool` (6), `shell.env` |
+| **tinycode-plugin-ocp-context** | Injects cluster metadata (version, nodes, namespace, operators) into the system prompt on session start. The LLM knows what cluster it's targeting without being told. Includes cost context injection when console token is configured. | `session.start`, `system.transform` |
+| **tinycode-plugin-ocp-cluster-ops** | Direct cluster visibility — get resources, tail logs, describe objects, view events, check cluster health, apply manifests (with confirmation). Includes GitOps tools (app listing/sync/diff/history), Insights integration (recommendations, CVEs), and observability shortcuts (pod metrics, resource usage, error rate). | `tool` (15), `shell.env` |
+| **tinycode-plugin-obs-metrics** | Observability metrics and alerts — run PromQL queries, list alerts, silence alerts with confirmation. Injects firing alert count into system prompt. | `tool` (3), `system.transform` |
+| **tinycode-plugin-obs-logging** | Observability logging and tracing — query Loki logs, search Tempo traces, view network flows, list dashboards. | `tool` (5) |
 
 **Tools (ocp-cluster-ops):**
 - `ocp_get_resources` — Get pods, deployments, services, routes by namespace
@@ -33,13 +58,35 @@ All plugins that connect to OpenShift-hosted services benefit from installing `t
 - `ocp_events` — Cluster/namespace events filtered by type, reason, or object
 - `ocp_apply` — Apply a YAML manifest (prompts for confirmation)
 - `ocp_status` — Cluster health: nodes, cluster operators, API server
+- `ocp_gitops_apps` — List ArgoCD applications with sync and health status
+- `ocp_gitops_sync` — Sync an ArgoCD application (prompts for confirmation)
+- `ocp_gitops_diff` — Show diff between live and desired state
+- `ocp_gitops_history` — Deployment history for an ArgoCD application
+- `ocp_insights_recommendations` — Insights Advisor recommendations by risk
+- `ocp_insights_cves` — CVEs affecting the cluster from Insights
+- `ocp_top_pods` — CPU/memory metrics for pods in a namespace
+- `ocp_resource_usage` — Namespace resource usage vs. quotas
+- `ocp_error_rate` — Error rate summary for workloads in a namespace
+
+**Tools (obs-metrics):**
+- `obs_promql` — Run PromQL instant or range query with formatted results
+- `obs_alerts` — List active alerts filtered by severity and namespace
+- `obs_alert_silence` — Silence an alert with confirmation
+
+**Tools (obs-logging):**
+- `obs_logs` — Query Loki logs with LogQL or namespace/pod/severity filters
+- `obs_traces` — Search Tempo traces by service, operation, duration
+- `obs_trace_detail` — Full span tree for a trace ID
+- `obs_network_flows` — Network flow data from Network Observability
+- `obs_dashboards` — List available Grafana dashboards
 
 ### Security
 
 | Package | Description | Hooks |
 |---------|-------------|-------|
-| **tinycode-plugin-rhacs** | RHACS security scanning via Central API. Scan images, check policies, validate deployments, list violations, assess risk. | `tool` (5) |
-| **tinycode-plugin-lightwell** | Red Hat Lightwell dependency checker. Verify Java/Python packages against remediated repos, check SLSA provenance, scan for OSV vulnerabilities, audit build configs. | `tool` (5) |
+| **tinycode-plugin-rhacs** | RHACS security scanning via Central API. Scan images, check policies, validate deployments, list violations, assess risk. Enhanced with compliance scan and compliance results tools. | `tool` (7) |
+| **tinycode-plugin-lightwell** | Red Hat Lightwell dependency checker. Verify Java/Python packages against remediated repos, check SLSA provenance, scan for OSV vulnerabilities, audit build configs. Enhanced with Containerfile scanner. | `tool` (6) |
+| **tinycode-plugin-container-linter** | Containerfile/Dockerfile linter with Red Hat best practices — UBI base image checks, security warnings, bootc validation, base image suggestions. | `tool` (3) |
 
 **Tools (rhacs):**
 - `rhacs_image_scan` — Scan container image for CVEs with severity, CVSS, fix status
@@ -47,6 +94,8 @@ All plugins that connect to OpenShift-hosted services benefit from installing `t
 - `rhacs_deployment_check` — Validate deployment YAML against security policies
 - `rhacs_violations` — List active policy violations by namespace or severity
 - `rhacs_risk` — Risk score and factors for a deployment
+- `rhacs_compliance_scan` — Trigger a compliance scan for a cluster or namespace
+- `rhacs_compliance_status` — Get compliance scan results by standard (CIS, NIST, PCI)
 
 **Tools (lightwell):**
 - `lightwell_check_package` — Check a single package against Lightwell repos
@@ -54,12 +103,18 @@ All plugins that connect to OpenShift-hosted services benefit from installing `t
 - `lightwell_osv` — Query OSV vulnerability data for a package
 - `lightwell_provenance` — Verify SLSA Level 3 build provenance
 - `lightwell_config_check` — Audit settings.xml/build.gradle/pip.conf for Lightwell repo config
+- `lightwell_scan_containerfile` — Scan Containerfile for dependency and base image issues
+
+**Tools (container-linter):**
+- `container_lint` — Lint Containerfile against 7 Red Hat best practice rules
+- `bootc_validate` — Validate bootc-compatible image builds
+- `container_base_suggest` — Suggest UBI base image for a use case
 
 ### DevEx
 
 | Package | Description | Hooks |
 |---------|-------------|-------|
-| **tinycode-plugin-tekton** | Tekton pipeline management — list pipelines, start runs (with confirmation), check status, view logs, verify Enterprise Contract. | `tool` (6), `shell.env` |
+| **tinycode-plugin-tekton** | Tekton pipeline management — list pipelines and tasks, start runs (with confirmation), check status, view logs. | `tool` (6), `shell.env` |
 | **tinycode-plugin-quay** | Quay container registry — search repos, list tags, inspect manifests, get Clair vulnerability scans, manage labels. | `tool` (5) |
 | **tinycode-plugin-rhdh** | Red Hat Developer Hub catalog — search the software catalog, fetch entity details, pull OpenAPI specs, read TechDocs, map dependencies. | `tool` (5) |
 
@@ -89,7 +144,7 @@ All plugins that connect to OpenShift-hosted services benefit from installing `t
 
 | Package | Description | Hooks |
 |---------|-------------|-------|
-| **tinycode-plugin-aap-bridge** | Ansible Automation Platform tools — list/launch job templates, check job status, get output, search Automation Hub collections. | `tool` (6), `shell.env` |
+| **tinycode-plugin-aap-bridge** | Ansible Automation Platform tools — list/launch job templates, check job status, get output, search Automation Hub collections, lint playbooks. | `tool` (7), `shell.env` |
 | **tinycode-plugin-eda-events** | Bridges tinycode session events to Event-Driven Ansible webhooks. Image builds, Dockerfile edits, manifest changes, and git pushes trigger EDA rulebooks automatically. | `session.*`, `tool.execute.after` |
 
 **Tools (aap-bridge):**
@@ -99,6 +154,7 @@ All plugins that connect to OpenShift-hosted services benefit from installing `t
 - `aap_job_output` — Full stdout/stderr of a completed job
 - `aap_list_inventories` — List inventories with host counts
 - `aap_hub_search` — Search Automation Hub for certified collections
+- `aap_lint_playbook` — Lint an Ansible playbook for best practices and errors
 
 **Events (eda-events):**
 - `tinycode.image.built` — docker/podman build detected
@@ -106,17 +162,66 @@ All plugins that connect to OpenShift-hosted services benefit from installing `t
 - `tinycode.manifest.changed` — k8s YAML edited
 - `tinycode.code.pushed` — git push detected
 
+### Fleet
+
+| Package | Description | Hooks |
+|---------|-------------|-------|
+| **tinycode-plugin-rhacm** | RHACM multi-cluster management — managed clusters, governance policies, violations, applications, observability via Thanos. Injects fleet summary into system prompt. | `tool` (7), `system.transform` |
+
+**Tools (rhacm):**
+- `acm_clusters` — List managed clusters with status, version, provider
+- `acm_cluster_detail` — Detailed cluster info with addon status
+- `acm_policies` — List governance policies with compliance status
+- `acm_violations` — Active policy violations across fleet
+- `acm_applications` — List ACM-managed ArgoCD applications
+- `acm_app_deploy` — Deploy ApplicationSet with confirmation
+- `acm_observability` — Run federated PromQL via ACM Thanos
+
 ### RHOAI
 
 | Package | Description | Hooks |
 |---------|-------------|-------|
-| **tinycode-plugin-rhoai-models** | Discover RHOAI model serving infrastructure — list InferenceServices, check model status, browse ServingRuntimes. | `tool` (3) |
-| **tinycode-plugin-rhoai-experiments** | Track session metrics to MLFlow — tool call counts, session duration, model switches. Compare local model performance across sessions. | `session.*`, `tool.execute.after`, `event` |
+| **tinycode-plugin-rhoai-models** | Discover RHOAI model serving infrastructure — list InferenceServices, check model status, browse ServingRuntimes. Enhanced with Developer Sandbox provisioning and status tools. | `tool` (5) |
+| **tinycode-plugin-rhoai-experiments** | Track session metrics to MLFlow — tool call counts, session duration, model switches. Compare local model performance across sessions. Injects previous session summary into the system prompt on session start. | `session.*`, `tool.execute.after`, `event`, `system.transform` |
+| **tinycode-plugin-rhoai-mcp-bridge** | Bridge to RHOAI MCP server — list and call tools exposed by the RHOAI MCP endpoint. | `tool` (2) |
+| **tinycode-plugin-mlflow-tools** | MLFlow experiment and model registry tools — list experiments, compare runs, browse artifacts, manage model versions. | `tool` (8) |
+| **tinycode-plugin-rhoai-pipelines** | RHOAI Data Science Pipelines (Kubeflow) — list pipelines, trigger runs, check status, create pipelines. | `tool` (4) |
+| **tinycode-plugin-rhoai-eval-trustyai** | RHOAI evaluation, TrustyAI fairness/drift monitoring, and workbench management. | `tool` (6) |
 
 **Tools (rhoai-models):**
 - `rhoai_list_models` — List deployed models with serving runtime, status, URL
 - `rhoai_model_status` — Detailed status: replicas, GPU allocation, conditions
 - `rhoai_list_runtimes` — Available ServingRuntimes (vLLM, Caikit, TGIS)
+- `rhoai_sandbox_provision` — Provision a Developer Sandbox environment
+- `rhoai_sandbox_status` — Check Developer Sandbox provisioning status
+
+**Tools (rhoai-mcp-bridge):**
+- `rhoai_mcp_list` — List tools exposed by the RHOAI MCP endpoint with descriptions and input schemas
+- `rhoai_mcp_call` — Call a tool on the RHOAI MCP server by name
+
+**Tools (mlflow-tools):**
+- `mlflow_experiments` — List MLFlow experiments with name, id, and lifecycle stage
+- `mlflow_runs` — List runs in an experiment with status, start time, and metrics summary
+- `mlflow_compare` — Compare 2-5 runs side-by-side with params and metrics diff table
+- `mlflow_artifacts` — Browse artifacts attached to a run with path, type, and size
+- `mlflow_model_registry` — List registered models with latest version info
+- `mlflow_model_version` — Detailed info for a specific model version (stage, status, source, run ID)
+- `mlflow_promote` — Transition model version stage to Staging/Production/Archived (with confirmation)
+- `mlflow_log_metric` — Log a metric value to an MLFlow run
+
+**Tools (rhoai-pipelines):**
+- `rhoai_pipeline_list` — List Data Science Pipelines with name, description, and created date
+- `rhoai_pipeline_run` — Trigger a pipeline run (prompts for confirmation)
+- `rhoai_pipeline_status` — Check status of a pipeline run
+- `rhoai_pipeline_create` — Create a pipeline from a workflow definition
+
+**Tools (rhoai-eval-trustyai):**
+- `rhoai_eval_run` — Run model evaluation using lm-eval, ragas, garak, or guidellm (with confirmation)
+- `rhoai_eval_status` — Check evaluation status and results with score tables
+- `rhoai_eval_compare` — Compare results across multiple evaluations side by side
+- `rhoai_trusty_metrics` — TrustyAI fairness and drift metrics for a model (drift score, bias, feature distributions)
+- `rhoai_trusty_alerts` — Active TrustyAI alerts for drift and bias across all models
+- `rhoai_workbench_list` — List Data Science workbenches with status, image, and GPU allocation
 
 ### Satellite
 
@@ -129,6 +234,37 @@ All plugins that connect to OpenShift-hosted services benefit from installing `t
 - `satellite_hosts` — Search managed hosts by name, OS, environment
 - `satellite_errata` — Search errata by type (security/bugfix/enhancement)
 - `satellite_content_views` — List content views with publish dates
+
+### Reference
+
+| Package | Description | Hooks |
+|---------|-------------|-------|
+| **tinycode-plugin-rh-dev-content** | Red Hat developer content search — articles, cheatsheets, learning paths from local content directory. Auto-detects project framework for relevant content hints. | `tool` (4), `session.start`, `system.transform` |
+| **tinycode-plugin-ecosystem-catalog** | Red Hat Ecosystem Catalog — search certified partners, operators, and hardware by keyword, category, or platform. | `tool` (3) |
+| **tinycode-plugin-rh-api-catalog** | Red Hat API catalog — browse 25 console.redhat.com APIs, fetch OpenAPI specs, list endpoints. Static catalog always works; live specs need auth. | `tool` (3) |
+| **tinycode-plugin-rhdp-provisioner** | RHDP demo environment provisioner — search catalog, provision environments with confirmation, check status, list active environments. | `tool` (4) |
+
+**Tools (rh-dev-content):**
+- `rh_dev_search` — Search indexed Red Hat developer articles by keyword with title, path, and snippet
+- `rh_dev_article` — Read full article content by file path from the developer content index
+- `rh_dev_cheatsheet` — Search Red Hat developer cheatsheets by topic
+- `rh_dev_learning_path` — Search Red Hat developer learning paths by topic
+
+**Tools (ecosystem-catalog):**
+- `ecosystem_search` — Search certified partners, operators, and hardware by keyword, category, or platform
+- `ecosystem_operator` — Get certified operator details (supported OCP versions, install method, certification status)
+- `ecosystem_hardware` — Search certified hardware (vendor, model, certification status, supported versions)
+
+**Tools (rh-api-catalog):**
+- `rh_api_list` — Browse available console.redhat.com APIs with name, description, and version
+- `rh_api_spec` — Fetch OpenAPI spec for an API
+- `rh_api_endpoints` — List endpoints for an API with methods, paths, descriptions, and parameters
+
+**Tools (rhdp-provisioner):**
+- `rhdp_search` — Search RHDP demo catalog by keyword or category
+- `rhdp_provision` — Provision a demo environment (prompts for confirmation)
+- `rhdp_status` — Check provisioning status of an environment
+- `rhdp_list_active` — List active demo environments with expiration
 
 ## Suggested Bundles
 
@@ -156,6 +292,8 @@ tinycode plugin add \
   tinycode-plugin-ocp-oauth \
   tinycode-plugin-ocp-context \
   tinycode-plugin-ocp-cluster-ops \
+  tinycode-plugin-obs-metrics \      # PromQL queries and alert management
+  tinycode-plugin-obs-logging \      # log queries, traces, network flows
   tinycode-plugin-tekton \
   tinycode-plugin-aap-bridge \       # run Ansible jobs from your session
   tinycode-plugin-eda-events \       # bridge coding events to EDA automation
@@ -186,8 +324,9 @@ tinycode plugin add \
   tinycode-plugin-ocp-oauth \
   tinycode-plugin-rhacs \            # core — image and deployment policy checks
   tinycode-plugin-lightwell \        # core — supply chain patch verification
+  tinycode-plugin-container-linter \ # Containerfile best practices and UBI checks
   tinycode-plugin-quay \             # Clair vulnerability scans
-  tinycode-plugin-tekton             # Enterprise Contract verification
+  tinycode-plugin-tekton             # pipeline run auditing
 ```
 
 ### RHEL / Infrastructure (Sysadmin)
@@ -203,13 +342,42 @@ tinycode plugin add \
 
 ### AI/ML Engineer
 
-Model serving discovery and experiment tracking on RHOAI.
+Model serving, experiment tracking, pipelines, and evaluation on RHOAI.
 
 ```bash
 tinycode plugin add \
   tinycode-plugin-ocp-oauth \
   tinycode-plugin-rhoai-models \       # discover deployed models
-  tinycode-plugin-rhoai-experiments    # track session metrics to MLFlow
+  tinycode-plugin-rhoai-experiments \  # track session metrics to MLFlow
+  tinycode-plugin-mlflow-tools \       # experiment and model registry management
+  tinycode-plugin-rhoai-pipelines \    # Data Science Pipelines
+  tinycode-plugin-rhoai-eval-trustyai \ # evaluation and fairness monitoring
+  tinycode-plugin-rhoai-mcp-bridge     # bridge to RHOAI MCP server
+```
+
+### Fleet Manager
+
+Multi-cluster management with observability and access control.
+
+```bash
+tinycode plugin add \
+  tinycode-plugin-ocp-oauth \
+  tinycode-plugin-ocp-context \
+  tinycode-plugin-ocp-cluster-ops \
+  tinycode-plugin-rhacm \              # core — multi-cluster management
+  tinycode-plugin-obs-metrics          # federated metrics and alerts
+```
+
+### Developer Reference
+
+Red Hat developer content, ecosystem catalog, and API discovery.
+
+```bash
+tinycode plugin add \
+  tinycode-plugin-rh-dev-content \     # articles, cheatsheets, learning paths
+  tinycode-plugin-ecosystem-catalog \  # certified partners and operators
+  tinycode-plugin-rh-api-catalog \     # console.redhat.com API specs
+  tinycode-plugin-rhdp-provisioner     # provision demo environments
 ```
 
 ### Network Troubleshooting
@@ -221,7 +389,7 @@ tinycode plugin add \
   tinycode-plugin-ocp-oauth \
   tinycode-plugin-ocp-context \
   tinycode-plugin-ocp-cluster-ops \  # get pods, events, logs, describe
-  tinycode-plugin-rhacs              # network policy generation from observed traffic
+  tinycode-plugin-rhacs              # security policy checks on network-related workloads
 ```
 
 ### Forensic Investigation
@@ -238,6 +406,62 @@ tinycode plugin add \
   tinycode-plugin-quay               # image manifest and vulnerability history
 ```
 
+### Developer Onboarding
+
+New hire ramp-up — explore the catalog, read learning paths, spin up demo environments, discover APIs.
+
+```bash
+tinycode plugin add \
+  tinycode-plugin-rh-dev-content \     # articles, cheatsheets, learning paths
+  tinycode-plugin-rhdh \               # software catalog and TechDocs
+  tinycode-plugin-rh-api-catalog \     # console.redhat.com API specs
+  tinycode-plugin-rhdp-provisioner \   # provision demo environments
+  tinycode-plugin-ecosystem-catalog    # certified partners and operators
+```
+
+### Incident Response / On-Call
+
+Real-time triage — live metrics, log queries, alert management, and security violations.
+
+```bash
+tinycode plugin add \
+  tinycode-plugin-ocp-oauth \
+  tinycode-plugin-ocp-context \
+  tinycode-plugin-ocp-cluster-ops \  # cluster state, events, pod logs
+  tinycode-plugin-obs-metrics \      # PromQL queries and alert silencing
+  tinycode-plugin-obs-logging \      # Loki logs and Tempo traces
+  tinycode-plugin-rhacs              # active violations and risk scores
+```
+
+### Migration to OpenShift
+
+Teams moving workloads to OpenShift — container best practices, dependency checking, and cluster operations.
+
+```bash
+tinycode plugin add \
+  tinycode-plugin-ocp-oauth \
+  tinycode-plugin-ocp-context \
+  tinycode-plugin-ocp-cluster-ops \    # deploy and verify on the target cluster
+  tinycode-plugin-container-linter \   # UBI base images and best practices
+  tinycode-plugin-lightwell \          # dependency patching for RHEL
+  tinycode-plugin-rhdh                 # discover existing services and APIs
+```
+
+### Day-2 Operations
+
+Ongoing operational maintenance across clusters and fleet.
+
+```bash
+tinycode plugin add \
+  tinycode-plugin-ocp-oauth \
+  tinycode-plugin-ocp-context \
+  tinycode-plugin-ocp-cluster-ops \        # core cluster operations
+  tinycode-plugin-obs-metrics \            # PromQL metrics and alerts
+  tinycode-plugin-obs-logging \            # logs, traces, network flows
+  tinycode-plugin-rhacm \                  # multi-cluster fleet view
+  tinycode-plugin-satellite-lightspeed     # RHEL host management
+```
+
 ## Shared Package
 
 All plugins depend on `tinycode-plugin-redhat-shared`, which provides:
@@ -245,15 +469,22 @@ All plugins depend on `tinycode-plugin-redhat-shared`, which provides:
 - **OC Client** — typed wrapper around `oc` CLI (get, describe, logs, apply, raw)
 - **API Client** — HTTP client with token injection and 401 retry
 - **Token Manager** — singleton auth token management across plugins (authenticate once via ocp-oauth, all plugins reuse the token)
+- **Console Auth** — SSO token exchange for console.redhat.com APIs
+- **PromQL Client** — Prometheus/Thanos query and alert management
+- **Local Search Index** — file-based full-text search for offline content
+- **Containerfile Parser** — multi-stage Containerfile parsing and dependency extraction
+- **MLFlow Client** — MLFlow tracking server operations
 - **Test Utilities** — mock shell, mock fetch, mock plugin input for testing
 
 ## Development
+
+**Prerequisites:** [Bun](https://bun.sh) (runtime and package manager), `oc` CLI (for OpenShift-connected plugins).
 
 ```bash
 # Install dependencies
 bun install
 
-# Run all tests (296 tests across 14 packages)
+# Run all tests (~687 tests across 26 packages)
 bun test --recursive
 
 # Type check all packages
@@ -272,9 +503,12 @@ redhat/
     oauth/                    # tinycode-plugin-ocp-oauth
     context-injection/        # tinycode-plugin-ocp-context
     cluster-ops/              # tinycode-plugin-ocp-cluster-ops
+    obs-metrics/              # tinycode-plugin-obs-metrics
+    obs-logging/              # tinycode-plugin-obs-logging
   security/
     rhacs/                    # tinycode-plugin-rhacs
     lightwell/                # tinycode-plugin-lightwell
+    container-linter/         # tinycode-plugin-container-linter
   devex/
     tekton/                   # tinycode-plugin-tekton
     quay/                     # tinycode-plugin-quay
@@ -282,11 +516,22 @@ redhat/
   automation/
     aap-bridge/               # tinycode-plugin-aap-bridge
     eda-events/               # tinycode-plugin-eda-events
+  fleet/
+    rhacm/                    # tinycode-plugin-rhacm
   rhoai/
     model-serving/            # tinycode-plugin-rhoai-models
     experiment-tracker/       # tinycode-plugin-rhoai-experiments
+    mcp-bridge/               # tinycode-plugin-rhoai-mcp-bridge
+    mlflow-tools/             # tinycode-plugin-mlflow-tools
+    pipelines/                # tinycode-plugin-rhoai-pipelines
+    eval-trustyai/            # tinycode-plugin-rhoai-eval-trustyai
   satellite/
     lightspeed/               # tinycode-plugin-satellite-lightspeed
+  reference/
+    dev-content/              # tinycode-plugin-rh-dev-content
+    ecosystem-catalog/        # tinycode-plugin-ecosystem-catalog
+    api-catalog/              # tinycode-plugin-rh-api-catalog
+    rhdp-provisioner/         # tinycode-plugin-rhdp-provisioner
 ```
 
 ## License
