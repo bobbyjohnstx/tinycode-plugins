@@ -1,0 +1,14 @@
+[allowlist]
+  description = "False positives — all test fixtures with fake tokens"
+
+  paths = [
+    '''\/test\/.*\.test\.ts$''',
+  ]
+
+  regexes = [
+    '''notsecret''',
+    '''test-access-token''',
+    '''offline-tok-123''',
+    '''test-token''',
+    '''testtoken123''',
+  ]

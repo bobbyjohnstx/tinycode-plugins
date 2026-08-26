@@ -8,7 +8,7 @@ afterEach(() => {
 })
 
 const validTokenResponse = {
-  access_token: "eyJhbGciOiJSUzI1NiJ9.test-access-token",
+  access_token: "eyJhbGciOiJSUzI1NiJ9.test-access-token", // notsecret
   expires_in: 900,
 }
 
@@ -21,7 +21,7 @@ describe("createConsoleAuthClient", () => {
         return new Response(JSON.stringify(validTokenResponse), { status: 200 })
       }) as unknown as typeof fetch
 
-      const client = createConsoleAuthClient({ offlineToken: "offline-tok-123" })
+      const client = createConsoleAuthClient({ offlineToken: "offline-tok-123" }) // notsecret
       const token = await client.getAccessToken()
 
       expect(token).toBe("eyJhbGciOiJSUzI1NiJ9.test-access-token")
