@@ -82,7 +82,7 @@ describe("tinycode-plugin-eda-events", () => {
   })
 
   describe("session.end", () => {
-    it("fires tinycode.session.ended webhook with duration", async () => {
+    it("fires tinycode.session.ended webhook with duration and delivery stats", async () => {
       const hooks = await getHooks({ edaEndpoint })
       await hooks["session.start"]!({ sessionID: "sess-2" }, {})
       await Bun.sleep(50)
@@ -97,6 +97,9 @@ describe("tinycode-plugin-eda-events", () => {
       expect(data["sessionId"]).toBe("sess-2")
       expect(typeof data["duration"]).toBe("number")
       expect(data["duration"] as number).toBeGreaterThanOrEqual(40)
+      const delivery = data["delivery"] as Record<string, unknown>
+      expect(delivery["sent"]).toBe(1)
+      expect(delivery["failed"]).toBe(0)
     })
   })
 
@@ -270,10 +273,26 @@ describe("tinycode-plugin-eda-events", () => {
       failingFetch()
       const hooks = await getHooks({ edaEndpoint })
 
-      // Should not throw
       await hooks["session.start"]!({ sessionID: "sess-10" }, {})
       await Bun.sleep(10)
-      // No assertion needed — test passes if no exception thrown
+    })
+
+    it("tracks failed delivery count in session.end", async () => {
+      failingFetch()
+      const hooks = await getHooks({ edaEndpoint })
+
+      await hooks["session.start"]!({ sessionID: "sess-10b" }, {})
+      await Bun.sleep(10)
+
+      capturingFetch()
+      await hooks["session.end"]!({ sessionID: "sess-10b" }, {})
+      await Bun.sleep(10)
+
+      expect(fetchCalls.length).toBe(1)
+      const data = fetchCalls[0]!.body["data"] as Record<string, unknown>
+      const delivery = data["delivery"] as Record<string, unknown>
+      expect(delivery["failed"]).toBe(1)
+      expect(delivery["lastError"]).toBe("network error")
     })
   })
 
