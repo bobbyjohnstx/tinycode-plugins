@@ -1,11 +1,47 @@
-import type { Hooks, PluginModule } from "tinycode-plugin"
+import type { Hooks, PluginModule, ToolDefinition } from "tinycode-plugin"
+import { z } from "zod"
 import { createOcClient } from "tinycode-plugin-redhat-shared/oc"
+import { createConsoleApiClient } from "tinycode-plugin-redhat-shared/console-auth"
 import { createCoreTools } from "./core-tools"
 import { createGitOpsTools } from "./gitops-tools"
+import {
+  createInsightsTools,
+  createUnconfiguredInsightsTools,
+} from "./insights-tools"
+import { createObsTools } from "./obs-tools"
+
+const optionsSchema = z
+  .object({
+    consoleOfflineToken: z.string().optional(),
+    clusterId: z.string().optional(),
+  })
+  .optional()
 
 export default {
-  server: async (input, _options): Promise<Hooks> => {
+  schema: optionsSchema,
+  server: async (input, options): Promise<Hooks> => {
     const oc = createOcClient(input.$)
+    const parsed = optionsSchema.safeParse(options)
+    const opts = parsed.success ? parsed.data : undefined
+
+    let insightsTools: Record<string, ToolDefinition>
+    if (opts?.consoleOfflineToken && opts.clusterId) {
+      const insightsClient = createConsoleApiClient(
+        { offlineToken: opts.consoleOfflineToken },
+        "/api/insights/v1",
+      )
+      const vulnerabilityClient = createConsoleApiClient(
+        { offlineToken: opts.consoleOfflineToken },
+        "/api/vulnerability/v1",
+      )
+      insightsTools = createInsightsTools(
+        insightsClient,
+        vulnerabilityClient,
+        opts.clusterId,
+      )
+    } else {
+      insightsTools = createUnconfiguredInsightsTools()
+    }
 
     return {
       "shell.env": async (
@@ -18,6 +54,8 @@ export default {
       tool: {
         ...createCoreTools(oc),
         ...createGitOpsTools(oc),
+        ...insightsTools,
+        ...createObsTools(oc),
       },
     }
   },

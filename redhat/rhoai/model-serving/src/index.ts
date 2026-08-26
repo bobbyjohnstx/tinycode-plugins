@@ -1,12 +1,21 @@
 import type { Hooks, PluginModule } from "tinycode-plugin"
 import { z } from "zod"
 import { createOcClient } from "tinycode-plugin-redhat-shared/oc"
+import { createApiClient } from "tinycode-plugin-redhat-shared/api"
+import { createConsoleAuthClient } from "tinycode-plugin-redhat-shared/console-auth"
 import { listModels, getModelStatus, listRuntimes } from "./model-discovery"
+import {
+  createSandboxTools,
+  createUnconfiguredSandboxTools,
+} from "./sandbox-tools"
+
+const SANDBOX_API_BASE_URL = "https://api.sandbox.devshift.net/api/v1"
 
 const optionsSchema = z
   .object({
     namespace: z.string().optional(),
     routeHost: z.string().optional(),
+    consoleOfflineToken: z.string().optional(),
   })
   .optional()
 
@@ -18,6 +27,20 @@ export default {
     const namespace = parsed?.namespace
 
     const oc = createOcClient(input.$)
+
+    let sandboxTools: Record<string, import("tinycode-plugin").ToolDefinition>
+    if (parsed?.consoleOfflineToken) {
+      const authClient = createConsoleAuthClient({
+        offlineToken: parsed.consoleOfflineToken,
+      })
+      const sandboxClient = createApiClient({
+        baseUrl: SANDBOX_API_BASE_URL,
+        tokenFn: () => authClient.getAccessToken(),
+      })
+      sandboxTools = createSandboxTools(sandboxClient)
+    } else {
+      sandboxTools = createUnconfiguredSandboxTools()
+    }
 
     return {
       tool: {
@@ -84,6 +107,8 @@ export default {
             }
           },
         },
+
+        ...sandboxTools,
       },
     }
   },

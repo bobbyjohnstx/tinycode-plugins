@@ -12,7 +12,7 @@ describe("tinycode-plugin-ocp-cluster-ops", () => {
     expect(hooks).toBeDefined()
   })
 
-  it("registers all ten tools", async () => {
+  it("registers all fifteen tools", async () => {
     const input = createMockInput()
     const hooks = await plugin.server(input, undefined)
     expect(hooks.tool).toBeDefined()
@@ -27,7 +27,12 @@ describe("tinycode-plugin-ocp-cluster-ops", () => {
     expect(toolNames).toContain("ocp_gitops_sync")
     expect(toolNames).toContain("ocp_gitops_diff")
     expect(toolNames).toContain("ocp_gitops_history")
-    expect(toolNames).toHaveLength(10)
+    expect(toolNames).toContain("ocp_insights_recommendations")
+    expect(toolNames).toContain("ocp_insights_cves")
+    expect(toolNames).toContain("ocp_top_pods")
+    expect(toolNames).toContain("ocp_resource_usage")
+    expect(toolNames).toContain("ocp_error_rate")
+    expect(toolNames).toHaveLength(15)
   })
 
   describe("shell.env", () => {

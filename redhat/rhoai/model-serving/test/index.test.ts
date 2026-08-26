@@ -128,7 +128,9 @@ describe("tinycode-plugin-rhoai-models", () => {
     expect(toolNames).toContain("rhoai_list_models")
     expect(toolNames).toContain("rhoai_model_status")
     expect(toolNames).toContain("rhoai_list_runtimes")
-    expect(toolNames).toHaveLength(3)
+    expect(toolNames).toContain("rhoai_sandbox_status")
+    expect(toolNames).toContain("rhoai_sandbox_provision")
+    expect(toolNames).toHaveLength(5)
   })
 
   describe("rhoai_list_models", () => {
