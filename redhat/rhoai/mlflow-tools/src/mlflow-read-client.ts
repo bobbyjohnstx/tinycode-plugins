@@ -59,7 +59,7 @@ export function createMlflowReadClient(config: {
 }): MlflowReadClient {
   const client = createApiClient({
     baseUrl: config.mlflowUrl,
-    tokenFn: config.tokenFn ?? (async () => ""),
+    tokenFn: config.tokenFn ?? (async () => null),
   })
 
   return {

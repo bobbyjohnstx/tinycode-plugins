@@ -8,7 +8,7 @@ export function createCoreTools(
   return {
     ocp_get_resources: {
       description:
-        "Get OpenShift/Kubernetes resources (pods, deployments, services, routes, etc.) by namespace. Returns structured JSON.",
+        "Get OpenShift/Kubernetes resources (pods, deployments, services, routes, etc.) by namespace. Returns structured JSON, limited to avoid overwhelming output.",
       args: {
         resource: z
           .string()
@@ -23,19 +23,31 @@ export function createCoreTools(
           .string()
           .optional()
           .describe("Label selector to filter resources (e.g. app=myapp)"),
+        limit: z
+          .number()
+          .optional()
+          .describe("Maximum number of items to return (default: 50)"),
       },
       async execute(
         args: {
           resource: string
           namespace?: string
           selector?: string
+          limit?: number
         },
       ) {
         try {
-          const result = await oc.get(args.resource, {
+          const result = await oc.get<{ items?: unknown[] }>(args.resource, {
             namespace: args.namespace,
             selector: args.selector,
           })
+          const max = args.limit ?? 50
+          if (result.items && result.items.length > max) {
+            const total = result.items.length
+            const truncated = { ...result, items: result.items.slice(0, max) }
+            return JSON.stringify(truncated, null, 2) +
+              `\n\n(Showing ${max} of ${total} items. Use --selector or increase limit to see more.)`
+          }
           return JSON.stringify(result, null, 2)
         } catch (error) {
           return `Error getting resources: ${error instanceof Error ? error.message : String(error)}`
@@ -122,7 +134,7 @@ export function createCoreTools(
 
     ocp_events: {
       description:
-        "Get cluster or namespace events, optionally filtered by type, reason, or involved object.",
+        "Get cluster or namespace events, optionally filtered by type, reason, or involved object. Limited to avoid overwhelming output.",
       args: {
         namespace: z
           .string()
@@ -136,15 +148,26 @@ export function createCoreTools(
           .describe(
             "Field selector to filter events (e.g. type=Warning, involvedObject.name=my-pod, reason=FailedScheduling)",
           ),
+        limit: z
+          .number()
+          .optional()
+          .describe("Maximum number of events to return (default: 50)"),
       },
       async execute(
-        args: { namespace?: string; fieldSelector?: string },
+        args: { namespace?: string; fieldSelector?: string; limit?: number },
       ) {
         try {
-          const result = await oc.get("events", {
+          const result = await oc.get<{ items?: unknown[] }>("events", {
             namespace: args.namespace,
             fieldSelector: args.fieldSelector,
           })
+          const max = args.limit ?? 50
+          if (result.items && result.items.length > max) {
+            const total = result.items.length
+            const truncated = { ...result, items: result.items.slice(0, max) }
+            return JSON.stringify(truncated, null, 2) +
+              `\n\n(Showing ${max} of ${total} events. Use fieldSelector to narrow results or increase limit.)`
+          }
           return JSON.stringify(result, null, 2)
         } catch (error) {
           return `Error getting events: ${error instanceof Error ? error.message : String(error)}`
@@ -178,29 +201,62 @@ export function createCoreTools(
 
     ocp_status: {
       description:
-        "Get cluster health summary including node status, cluster operators, and API server availability.",
+        "Get cluster health summary including node count/status, cluster operator count/status, and version.",
       args: {},
       async execute() {
         try {
           const sections: string[] = []
 
+          type NodeItem = {
+            metadata: { name: string }
+            status: {
+              conditions: Array<{ type: string; status: string }>
+            }
+          }
           const nodes = await oc
-            .get<{ items: unknown[] }>("nodes")
+            .get<{ items: NodeItem[] }>("nodes")
             .catch(() => null)
           if (nodes) {
+            const ready = nodes.items.filter((n) =>
+              n.status.conditions.some(
+                (c) => c.type === "Ready" && c.status === "True",
+              ),
+            ).length
+            const total = nodes.items.length
+            const names = nodes.items.map((n) => n.metadata.name)
             sections.push(
-              "## Nodes\n" + JSON.stringify(nodes, null, 2),
+              `## Nodes: ${ready}/${total} Ready\n${names.join(", ")}`,
             )
           }
 
+          type OperatorItem = {
+            metadata: { name: string }
+            status: {
+              conditions: Array<{ type: string; status: string }>
+            }
+          }
           const clusterOperators = await oc
-            .get<{ items: unknown[] }>("clusteroperators")
+            .get<{ items: OperatorItem[] }>("clusteroperators")
             .catch(() => null)
           if (clusterOperators) {
-            sections.push(
-              "## Cluster Operators\n" +
-                JSON.stringify(clusterOperators, null, 2),
+            const available = clusterOperators.items.filter((o) =>
+              o.status.conditions.some(
+                (c) => c.type === "Available" && c.status === "True",
+              ),
+            ).length
+            const degraded = clusterOperators.items.filter((o) =>
+              o.status.conditions.some(
+                (c) => c.type === "Degraded" && c.status === "True",
+              ),
             )
+            const total = clusterOperators.items.length
+            const lines = [`## Cluster Operators: ${available}/${total} Available`]
+            if (degraded.length > 0) {
+              lines.push(
+                `Degraded: ${degraded.map((o) => o.metadata.name).join(", ")}`,
+              )
+            }
+            sections.push(lines.join("\n"))
           }
 
           const version = await oc.version().catch(() => null)

@@ -59,7 +59,7 @@ export type LightwellClient = {
 export function createLightwellClient(baseUrl: string, token?: string): LightwellClient {
   const api: ApiClient = createApiClient({
     baseUrl,
-    tokenFn: async () => token ?? "",
+    tokenFn: async () => token ?? null,
   })
 
   return {

@@ -29,7 +29,7 @@ export function createTrustyAIClient(config: {
 }): TrustyAIClient {
   const client = createApiClient({
     baseUrl: config.apiUrl,
-    tokenFn: config.tokenFn ?? (async () => ""),
+    tokenFn: config.tokenFn ?? (async () => null),
   })
 
   return {

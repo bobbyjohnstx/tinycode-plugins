@@ -297,7 +297,7 @@ describe("read-side integration with plugin", () => {
         if (!route)
           return Promise.resolve(new Response("Not Found", { status: 404 }))
         return Promise.resolve(
-          new Response(JSON.stringify(route.body), {
+          new Response(JSON.stringify(route.body), { headers: { "content-type": "application/json" },
             status: route.status ?? 200,
           }),
         )

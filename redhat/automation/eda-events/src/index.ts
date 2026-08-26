@@ -39,24 +39,47 @@ function sanitize(
   return result
 }
 
-function fireEvent(
+type DeliveryStats = {
+  sent: number
+  failed: number
+  lastError: string | null
+}
+
+function createEventSender(
   endpoint: string,
-  event: EdaEvent,
   patterns: RegExp[],
   allowedEvents: string[] | undefined,
-): void {
-  if (allowedEvents && !allowedEvents.includes(event.type)) return
+): { fire: (event: EdaEvent) => void; stats: DeliveryStats } {
+  const stats: DeliveryStats = { sent: 0, failed: 0, lastError: null }
 
-  const sanitized = {
-    ...event,
-    data: sanitize(event.data, patterns),
+  function fire(event: EdaEvent): void {
+    if (allowedEvents && !allowedEvents.includes(event.type)) return
+
+    const sanitized = {
+      ...event,
+      data: sanitize(event.data, patterns),
+    }
+
+    fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sanitized),
+    })
+      .then((res) => {
+        if (res.ok) {
+          stats.sent++
+        } else {
+          stats.failed++
+          stats.lastError = `HTTP ${res.status}`
+        }
+      })
+      .catch((err) => {
+        stats.failed++
+        stats.lastError = err instanceof Error ? err.message : String(err)
+      })
   }
 
-  fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(sanitized),
-  }).catch(() => {})
+  return { fire, stats }
 }
 
 export default {
@@ -86,6 +109,8 @@ export default {
     const rawPatterns = parsed.sensitivePatterns ?? DEFAULT_SENSITIVE_PATTERNS
     const patterns = rawPatterns.map((p) => new RegExp(p))
 
+    const { fire, stats } = createEventSender(endpoint, patterns, allowedEvents)
+
     let sessionId = ""
     let startTime = 0
 
@@ -94,39 +119,34 @@ export default {
         sessionId = event.sessionID
         startTime = Date.now()
 
-        fireEvent(
-          endpoint,
-          {
-            type: "tinycode.session.started",
-            timestamp: new Date().toISOString(),
+        fire({
+          type: "tinycode.session.started",
+          timestamp: new Date().toISOString(),
+          sessionId,
+          data: {
             sessionId,
-            data: {
-              sessionId,
-              projectDirectory: _input.directory,
-            },
+            projectDirectory: _input.directory,
           },
-          patterns,
-          allowedEvents,
-        )
+        })
       },
 
       "session.end": async (event, _output) => {
         const duration = Date.now() - startTime
 
-        fireEvent(
-          endpoint,
-          {
-            type: "tinycode.session.ended",
-            timestamp: new Date().toISOString(),
+        fire({
+          type: "tinycode.session.ended",
+          timestamp: new Date().toISOString(),
+          sessionId: event.sessionID,
+          data: {
             sessionId: event.sessionID,
-            data: {
-              sessionId: event.sessionID,
-              duration,
+            duration,
+            delivery: {
+              sent: stats.sent,
+              failed: stats.failed,
+              lastError: stats.lastError,
             },
           },
-          patterns,
-          allowedEvents,
-        )
+        })
       },
 
       "tool.execute.after": async (event, _output) => {
@@ -155,20 +175,15 @@ export default {
 
         if (!eventType) return
 
-        fireEvent(
-          endpoint,
-          {
-            type: eventType,
-            timestamp: new Date().toISOString(),
-            sessionId,
-            data: {
-              tool,
-              args,
-            },
+        fire({
+          type: eventType,
+          timestamp: new Date().toISOString(),
+          sessionId,
+          data: {
+            tool,
+            args,
           },
-          patterns,
-          allowedEvents,
-        )
+        })
       },
 
       dispose: async () => {

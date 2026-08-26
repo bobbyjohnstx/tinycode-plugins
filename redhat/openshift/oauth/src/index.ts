@@ -1,10 +1,10 @@
 import type { PluginModule } from "tinycode-plugin"
 import { z } from "zod"
-import { tokenManager } from "tinycode-plugin-redhat-shared/auth"
 
 const schema = z
   .object({
     server: z.string().url().optional(),
+    insecureSkipTlsVerify: z.boolean().optional(),
   })
   .optional()
 
@@ -55,19 +55,13 @@ export default {
                 return { type: "failed" as const }
               }
 
-              const result = await input
-                .$`oc login --token=${token} --server=${server} --insecure-skip-tls-verify`
-                .nothrow()
-                .quiet()
+              const cmd = config?.insecureSkipTlsVerify
+                ? input.$`oc login --token=${token} --server=${server} --insecure-skip-tls-verify`
+                : input.$`oc login --token=${token} --server=${server}`
+              const result = await cmd.nothrow().quiet()
               if (result.exitCode !== 0) {
                 return { type: "failed" as const }
               }
-
-              tokenManager.setToken(server, {
-                token,
-                source: "oauth",
-                server,
-              })
 
               return {
                 type: "success" as const,

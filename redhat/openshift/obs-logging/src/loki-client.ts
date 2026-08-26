@@ -22,7 +22,7 @@ export function createLokiClient(config: {
 }): LokiClient {
   const client = createApiClient({
     baseUrl: config.baseUrl,
-    tokenFn: config.tokenFn ?? (async () => ""),
+    tokenFn: config.tokenFn ?? (async () => null),
   })
 
   return {

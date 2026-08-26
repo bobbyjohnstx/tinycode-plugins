@@ -81,7 +81,7 @@ export type QuayClient = {
 export function createQuayClient(registryUrl: string, apiToken?: string): QuayClient {
   const api: ApiClient = createApiClient({
     baseUrl: registryUrl,
-    tokenFn: async () => apiToken ?? "",
+    tokenFn: async () => apiToken ?? null,
   })
 
   return {

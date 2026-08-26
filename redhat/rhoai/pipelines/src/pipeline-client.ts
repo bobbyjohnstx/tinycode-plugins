@@ -44,7 +44,7 @@ export function createPipelineClient(config: {
 }): PipelineClient {
   const client = createApiClient({
     baseUrl: config.apiUrl,
-    tokenFn: config.tokenFn ?? (async () => ""),
+    tokenFn: config.tokenFn ?? (async () => null),
   })
 
   return {
