@@ -107,6 +107,38 @@ describe("parseContainerfile", () => {
     expect(arg.defaultValue).toBe("1.0")
   })
 
+  it("parses multi-key ENV directive into separate entries", () => {
+    const content = [
+      "FROM ubi9",
+      'ENV FOO=bar BAZ="hello world"',
+    ].join("\n")
+
+    const result = parseContainerfile(content)
+    const envs = result.stages[0]!.instructions.filter((i) => i.type === "ENV") as Array<{ key: string; value: string }>
+
+    expect(envs).toHaveLength(2)
+    expect(envs[0]!.key).toBe("FOO")
+    expect(envs[0]!.value).toBe("bar")
+    expect(envs[1]!.key).toBe("BAZ")
+    expect(envs[1]!.value).toBe("hello world")
+  })
+
+  it("parses multi-key LABEL directive into separate entries", () => {
+    const content = [
+      "FROM ubi9",
+      'LABEL maintainer="team@redhat.com" version="1.0"',
+    ].join("\n")
+
+    const result = parseContainerfile(content)
+    const labels = result.stages[0]!.instructions.filter((i) => i.type === "LABEL") as Array<{ key: string; value: string }>
+
+    expect(labels).toHaveLength(2)
+    expect(labels[0]!.key).toBe("maintainer")
+    expect(labels[0]!.value).toBe("team@redhat.com")
+    expect(labels[1]!.key).toBe("version")
+    expect(labels[1]!.value).toBe("1.0")
+  })
+
   it("skips comments and blank lines", () => {
     const content = [
       "# This is a comment",

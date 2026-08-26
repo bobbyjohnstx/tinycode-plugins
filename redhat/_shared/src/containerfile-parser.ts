@@ -165,36 +165,54 @@ function parseCopyAdd(
   return { type: directive, src, dest, from, lineNumber }
 }
 
-function parseEnv(args: string, lineNumber: number): EnvDirective {
-  const eqIdx = args.indexOf("=")
-  if (eqIdx !== -1) {
-    const key = args.slice(0, eqIdx).trim()
-    const value = args.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "")
-    return { type: "ENV", key, value, lineNumber }
+function parseKeyValuePairs(args: string): Array<{ key: string; value: string }> {
+  const pairs: Array<{ key: string; value: string }> = []
+  const regex = /(\S+?)=(["'])(.*?)\2|(\S+?)=(\S*)/g
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(args)) !== null) {
+    const key = match[1] ?? match[4] ?? ""
+    const value = match[3] ?? match[5] ?? ""
+    pairs.push({ key, value })
+  }
+  return pairs
+}
+
+function parseEnv(args: string, lineNumber: number): EnvDirective[] {
+  const pairs = parseKeyValuePairs(args)
+  if (pairs.length > 0) {
+    return pairs.map(({ key, value }) => ({
+      type: "ENV" as const,
+      key,
+      value,
+      lineNumber,
+    }))
   }
 
   const spaceIdx = args.indexOf(" ")
   if (spaceIdx !== -1) {
-    return {
+    return [{
       type: "ENV",
       key: args.slice(0, spaceIdx).trim(),
       value: args.slice(spaceIdx + 1).trim(),
       lineNumber,
-    }
+    }]
   }
 
-  return { type: "ENV", key: args.trim(), value: "", lineNumber }
+  return [{ type: "ENV", key: args.trim(), value: "", lineNumber }]
 }
 
-function parseLabel(args: string, lineNumber: number): LabelDirective {
-  const eqIdx = args.indexOf("=")
-  if (eqIdx !== -1) {
-    const key = args.slice(0, eqIdx).trim()
-    const value = args.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "")
-    return { type: "LABEL", key, value, lineNumber }
+function parseLabel(args: string, lineNumber: number): LabelDirective[] {
+  const pairs = parseKeyValuePairs(args)
+  if (pairs.length > 0) {
+    return pairs.map(({ key, value }) => ({
+      type: "LABEL" as const,
+      key,
+      value,
+      lineNumber,
+    }))
   }
 
-  return { type: "LABEL", key: args.trim(), value: "", lineNumber }
+  return [{ type: "LABEL", key: args.trim(), value: "", lineNumber }]
 }
 
 function parseExpose(args: string, lineNumber: number): ExposeDirective {
@@ -222,41 +240,41 @@ function parseArg(args: string, lineNumber: number): ArgDirective {
 function parseInstruction(
   text: string,
   lineNumber: number,
-): ContainerfileInstruction | null {
+): ContainerfileInstruction[] {
   const match = text.match(/^(\S+)\s*(.*)$/s)
-  if (!match) return null
+  if (!match) return []
 
   const directive = match[1]!.toUpperCase()
   const args = match[2] ?? ""
 
   switch (directive) {
     case "FROM":
-      return parseFrom(args, lineNumber)
+      return [parseFrom(args, lineNumber)]
     case "RUN":
-      return { type: "RUN", command: args.trim(), lineNumber }
+      return [{ type: "RUN", command: args.trim(), lineNumber }]
     case "COPY":
-      return parseCopyAdd("COPY", args, lineNumber)
+      return [parseCopyAdd("COPY", args, lineNumber)]
     case "ADD":
-      return parseCopyAdd("ADD", args, lineNumber)
+      return [parseCopyAdd("ADD", args, lineNumber)]
     case "ENV":
       return parseEnv(args, lineNumber)
     case "LABEL":
       return parseLabel(args, lineNumber)
     case "USER":
-      return { type: "USER", user: args.trim(), lineNumber }
+      return [{ type: "USER", user: args.trim(), lineNumber }]
     case "EXPOSE":
-      return parseExpose(args, lineNumber)
+      return [parseExpose(args, lineNumber)]
     case "ARG":
-      return parseArg(args, lineNumber)
+      return [parseArg(args, lineNumber)]
     default:
       if (OTHER_DIRECTIVES.has(directive)) {
-        return {
+        return [{
           type: directive as OtherDirective["type"],
           value: args.trim(),
           lineNumber,
-        }
+        }]
       }
-      return null
+      return []
   }
 }
 
@@ -271,18 +289,19 @@ export function parseContainerfile(content: string): ParsedContainerfile {
     const trimmed = text.trim()
     if (trimmed === "" || trimmed.startsWith("#")) continue
 
-    const instruction = parseInstruction(trimmed, lineNumber)
-    if (!instruction) continue
+    const instructions = parseInstruction(trimmed, lineNumber)
 
-    if (instruction.type === "FROM") {
-      currentStage = { from: instruction, instructions: [instruction] }
-      stages.push(currentStage)
-    } else if (currentStage === null) {
-      if (instruction.type === "ARG") {
-        globalArgs.push(instruction)
+    for (const instruction of instructions) {
+      if (instruction.type === "FROM") {
+        currentStage = { from: instruction, instructions: [instruction] }
+        stages.push(currentStage)
+      } else if (currentStage === null) {
+        if (instruction.type === "ARG") {
+          globalArgs.push(instruction)
+        }
+      } else {
+        currentStage.instructions.push(instruction)
       }
-    } else {
-      currentStage.instructions.push(instruction)
     }
   }
 
