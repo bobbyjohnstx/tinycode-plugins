@@ -2,6 +2,7 @@ import type { Hooks, PluginModule, ToolContext, ToolDefinition } from "tinycode-
 import { z } from "zod"
 import { createAapClient } from "./aap-client"
 import type { AapClient, Collection, Inventory, Job, JobTemplate } from "./aap-client"
+import { createLintTools } from "./lint-tools"
 
 const optionsSchema = z
   .object({
@@ -285,13 +286,14 @@ function createUnconfiguredTools(): Record<string, ToolDefinition> {
 
 export default {
   schema: optionsSchema,
-  server: async (_input, options): Promise<Hooks> => {
+  server: async (input, options): Promise<Hooks> => {
     const result = optionsSchema.safeParse(options)
     const parsed = result.success ? result.data : undefined
+    const lintTools = createLintTools(input.$)
 
     if (!parsed?.controllerUrl || !parsed.oauthToken) {
       return {
-        tool: createUnconfiguredTools(),
+        tool: { ...createUnconfiguredTools(), ...lintTools },
       }
     }
 
@@ -299,7 +301,7 @@ export default {
     const client = createAapClient(parsed.controllerUrl, token)
 
     return {
-      tool: createTools(client),
+      tool: { ...createTools(client), ...lintTools },
       "shell.env": async (
         _event: { cwd: string; sessionID?: string; callID?: string },
         output: { env: Record<string, string> },

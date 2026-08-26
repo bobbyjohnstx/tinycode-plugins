@@ -1,6 +1,7 @@
 import type { Hooks, PluginModule, ToolDefinition } from "tinycode-plugin"
 import { z } from "zod"
 import { createLightwellClient } from "./lightwell-client"
+import { createContainerfileScannerTool } from "./containerfile-scanner"
 import type { LightwellClient, PackageCheckResult, OsvVulnerability, ProvenanceResult } from "./lightwell-client"
 
 const LIGHTWELL_BASE_URL = "https://packages.redhat.com/lightwell"
@@ -295,7 +296,7 @@ export default {
     const client = createLightwellClient(LIGHTWELL_BASE_URL, token)
 
     return {
-      tool: createTools(client),
+      tool: { ...createTools(client), ...createContainerfileScannerTool(client) },
     }
   },
 } satisfies PluginModule

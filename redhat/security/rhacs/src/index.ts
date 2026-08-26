@@ -2,6 +2,7 @@ import type { Hooks, PluginModule, ToolDefinition } from "tinycode-plugin"
 import { z } from "zod"
 import { createCentralClient } from "./central-client"
 import type { Alert, CentralClient, ImageScanResult } from "./central-client"
+import { createComplianceTools, createUnconfiguredComplianceTools } from "./compliance-tools"
 
 const optionsSchema = z
   .object({
@@ -294,14 +295,14 @@ export default {
 
     if (!parsed?.centralUrl || !parsed.apiToken) {
       return {
-        tool: createUnconfiguredTools(),
+        tool: { ...createUnconfiguredTools(), ...createUnconfiguredComplianceTools() },
       }
     }
 
     const client = createCentralClient(parsed.centralUrl, parsed.apiToken)
 
     return {
-      tool: createTools(client),
+      tool: { ...createTools(client), ...createComplianceTools(client) },
     }
   },
 } satisfies PluginModule

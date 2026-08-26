@@ -1,6 +1,7 @@
 import type { Hooks, PluginModule } from "tinycode-plugin"
 import { createOcClient } from "tinycode-plugin-redhat-shared/oc"
 import { createCoreTools } from "./core-tools"
+import { createGitOpsTools } from "./gitops-tools"
 
 export default {
   server: async (input, _options): Promise<Hooks> => {
@@ -16,6 +17,7 @@ export default {
 
       tool: {
         ...createCoreTools(oc),
+        ...createGitOpsTools(oc),
       },
     }
   },

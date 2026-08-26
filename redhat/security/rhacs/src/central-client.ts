@@ -58,12 +58,45 @@ export type RiskResult = {
   }>
 }
 
+export type ComplianceProfile = {
+  id?: string
+  name?: string
+  description?: string
+  totalControls?: number
+  passingControls?: number
+  failingControls?: number
+  profileVersion?: string
+}
+
+export type ComplianceControl = {
+  id?: string
+  name?: string
+  description?: string
+  status?: string
+  severity?: string
+  remediation?: string
+}
+
+export type ComplianceScanResult = {
+  scanConfigId?: string
+  profiles?: Array<{
+    profileName?: string
+    passing?: number
+    failing?: number
+    errors?: number
+    controls?: ComplianceControl[]
+  }>
+}
+
 export type CentralClient = {
   scanImage(imageName: string): Promise<ImageScanResult>
   checkImage(imageName: string): Promise<ImageCheckResult>
   checkDeployment(yaml: string): Promise<DeploymentCheckResult>
   listAlerts(query?: Record<string, string>): Promise<AlertListResult>
   getDeploymentRisk(deploymentId: string): Promise<RiskResult>
+  getComplianceProfiles(): Promise<{ profiles?: ComplianceProfile[] }>
+  runComplianceScan(scanConfigId: string): Promise<ComplianceScanResult>
+  getComplianceResults(scanConfigId?: string): Promise<{ results?: ComplianceScanResult[] }>
 }
 
 export function createCentralClient(centralUrl: string, apiToken: string): CentralClient {
@@ -101,6 +134,25 @@ export function createCentralClient(centralUrl: string, apiToken: string): Centr
 
     async getDeploymentRisk(deploymentId: string): Promise<RiskResult> {
       const response = await api.get<RiskResult>(`/v1/deployments/${deploymentId}/risk`)
+      return response.data
+    },
+
+    async getComplianceProfiles(): Promise<{ profiles?: ComplianceProfile[] }> {
+      const response = await api.get<{ profiles?: ComplianceProfile[] }>("/v2/compliance/profiles")
+      return response.data
+    },
+
+    async runComplianceScan(scanConfigId: string): Promise<ComplianceScanResult> {
+      const response = await api.post<ComplianceScanResult>(
+        `/v2/compliance/scan/configurations/${scanConfigId}/run`,
+        {},
+      )
+      return response.data
+    },
+
+    async getComplianceResults(scanConfigId?: string): Promise<{ results?: ComplianceScanResult[] }> {
+      const query = scanConfigId ? { scanConfigId } : undefined
+      const response = await api.get<{ results?: ComplianceScanResult[] }>("/v2/compliance/results", query)
       return response.data
     },
   }
