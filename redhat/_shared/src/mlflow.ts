@@ -1,4 +1,4 @@
-import type { ApiClient } from "tinycode-plugin-redhat-shared/api"
+import type { ApiClient } from "./api"
 
 type CreateExperimentResponse = {
   experiment_id: string

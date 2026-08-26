@@ -1,7 +1,7 @@
 import type { Hooks, PluginModule } from "tinycode-plugin"
 import { z } from "zod"
 import { createApiClient } from "tinycode-plugin-redhat-shared/api"
-import { createMlflowClient } from "./mlflow-client"
+import { createMlflowClient } from "tinycode-plugin-redhat-shared/mlflow"
 
 const optionsSchema = z
   .object({

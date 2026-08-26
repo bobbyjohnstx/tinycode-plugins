@@ -8,7 +8,12 @@
     "./oc": "./src/oc.ts",
     "./api": "./src/api.ts",
     "./auth": "./src/auth.ts",
-    "./test-utils": "./src/test-utils.ts"
+    "./promql": "./src/promql.ts",
+    "./test-utils": "./src/test-utils.ts",
+    "./console-auth": "./src/console-auth.ts",
+    "./local-search": "./src/local-search.ts",
+    "./mlflow": "./src/mlflow.ts",
+    "./containerfile-parser": "./src/containerfile-parser.ts"
   },
   "dependencies": {
     "tinycode-plugin": "^1.18.0"

@@ -27,7 +27,7 @@ describe("createApiClient", () => {
     globalThis.fetch = ((...args: Parameters<typeof fetch>) => {
       requests.push({ url: String(args[0]), init: args[1] })
       return mockFetch(...args)
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     const client = createApiClient({
       baseUrl: "https://api.example.com",
@@ -47,7 +47,7 @@ describe("createApiClient", () => {
     globalThis.fetch = ((...args: Parameters<typeof fetch>) => {
       requests.push({ url: String(args[0]) })
       return mockFetch(...args)
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     const client = createApiClient({
       baseUrl: "https://api.example.com",
@@ -69,7 +69,7 @@ describe("createApiClient", () => {
     globalThis.fetch = ((...args: Parameters<typeof fetch>) => {
       requests.push({ init: args[1] })
       return mockFetch(...args)
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     const client = createApiClient({
       baseUrl: "https://api.example.com",
@@ -97,7 +97,7 @@ describe("createApiClient", () => {
         return new Response("Unauthorized", { status: 401 })
       }
       return new Response(JSON.stringify({ data: "ok" }), { status: 200 })
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     const client = createApiClient({
       baseUrl: "https://api.example.com",
@@ -118,7 +118,7 @@ describe("createApiClient", () => {
 
     globalThis.fetch = (async () => {
       return new Response("Unauthorized", { status: 401 })
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     const client = createApiClient({
       baseUrl: "https://api.example.com",

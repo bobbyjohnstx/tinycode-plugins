@@ -1,6 +1,5 @@
 import { describe, it, expect } from "bun:test"
 import type { PluginInput, Hooks } from "tinycode-plugin"
-import type { Model } from "@tinycode/sdk"
 import { createMockShell } from "tinycode-plugin-redhat-shared/test-utils"
 import plugin from "../src/index"
 
@@ -40,14 +39,40 @@ const mockCsvData = {
   ],
 }
 
+const mockAlertData = [
+  { labels: { alertname: "KubePodCrashLooping", namespace: "payments-api", severity: "critical" } },
+  { labels: { alertname: "NodeFilesystemAlmostOutOfSpace", namespace: "worker-3", severity: "critical" } },
+  { labels: { alertname: "TargetDown", namespace: "user-workload-monitoring", severity: "warning" } },
+  { labels: { alertname: "InfoAlert", namespace: "kube-system", severity: "info" } },
+]
+
+const baseConnectedCommands = [
+  { match: "which oc", output: "/usr/local/bin/oc" },
+  { match: "oc whoami", output: "admin" },
+  { match: "oc version -o json", json: mockVersionData, output: JSON.stringify(mockVersionData) },
+  { match: "oc get nodes -o json", json: mockNodesData, output: JSON.stringify(mockNodesData) },
+  { match: "oc config current-context", output: "my-namespace/api-cluster-example-com:6443/admin" },
+  { match: "oc get csv -A -o json", output: JSON.stringify(mockCsvData) },
+] as const
+
 function createConnectedShell() {
   return createMockShell([
-    { match: "which oc", output: "/usr/local/bin/oc" },
-    { match: "oc whoami", output: "admin" },
-    { match: "oc version -o json", json: mockVersionData, output: JSON.stringify(mockVersionData) },
-    { match: "oc get nodes -o json", json: mockNodesData, output: JSON.stringify(mockNodesData) },
-    { match: "oc config current-context", output: "my-namespace/api-cluster-example-com:6443/admin" },
-    { match: "oc get csv -A -o json", output: JSON.stringify(mockCsvData) },
+    ...baseConnectedCommands,
+    { match: "alertmanager-main-0", exitCode: 1 },
+  ])
+}
+
+function createConnectedShellWithAlerts() {
+  return createMockShell([
+    ...baseConnectedCommands,
+    { match: "alertmanager-main-0", output: JSON.stringify(mockAlertData) },
+  ])
+}
+
+function createConnectedShellWithNoAlerts() {
+  return createMockShell([
+    ...baseConnectedCommands,
+    { match: "alertmanager-main-0", output: JSON.stringify([]) },
   ])
 }
 
@@ -76,7 +101,7 @@ describe("tinycode-plugin-ocp-context", () => {
     await hooks["session.start"]!({ sessionID: "test" }, {})
 
     const output = { system: [] as string[] }
-    await hooks["experimental.chat.system.transform"]!({ model: {} as Model }, output)
+    await hooks["experimental.chat.system.transform"]!({ model: {} as never }, output)
 
     expect(output.system.length).toBe(1)
     expect(output.system[0]).toContain("<cluster-context>")
@@ -95,7 +120,7 @@ describe("tinycode-plugin-ocp-context", () => {
     await hooks["session.start"]!({ sessionID: "test" }, {})
 
     const output = { system: [] as string[] }
-    await hooks["experimental.chat.system.transform"]!({ model: {} as Model }, output)
+    await hooks["experimental.chat.system.transform"]!({ model: {} as never }, output)
 
     expect(output.system.length).toBe(1)
     expect(output.system[0]).toBe("<cluster-context>not connected</cluster-context>")
@@ -111,7 +136,7 @@ describe("tinycode-plugin-ocp-context", () => {
     await hooks["session.start"]!({ sessionID: "test" }, {})
 
     const output = { system: [] as string[] }
-    await hooks["experimental.chat.system.transform"]!({ model: {} as Model }, output)
+    await hooks["experimental.chat.system.transform"]!({ model: {} as never }, output)
 
     expect(output.system.length).toBe(1)
     expect(output.system[0]).toBe("<cluster-context>not connected</cluster-context>")
@@ -125,7 +150,7 @@ describe("tinycode-plugin-ocp-context", () => {
     await hooks.dispose!()
 
     const output = { system: [] as string[] }
-    await hooks["experimental.chat.system.transform"]!({ model: {} as Model }, output)
+    await hooks["experimental.chat.system.transform"]!({ model: {} as never }, output)
 
     expect(output.system[0]).toBe("<cluster-context>not connected</cluster-context>")
   })
@@ -137,13 +162,72 @@ describe("tinycode-plugin-ocp-context", () => {
     await hooks["session.start"]!({ sessionID: "test" }, {})
 
     const output1 = { system: [] as string[] }
-    await hooks["experimental.chat.system.transform"]!({ model: {} as Model }, output1)
+    await hooks["experimental.chat.system.transform"]!({ model: {} as never }, output1)
 
     const output2 = { system: [] as string[] }
-    await hooks["experimental.chat.system.transform"]!({ model: {} as Model }, output2)
+    await hooks["experimental.chat.system.transform"]!({ model: {} as never }, output2)
 
     expect(output1.system[0]).toContain("<cluster-context>")
     expect(output2.system[0]).toContain("<cluster-context>")
     expect(output1.system[0]).toBe(output2.system[0])
+  })
+
+  it("includes firing alert summary when AlertManager returns alerts", async () => {
+    const shell = createConnectedShellWithAlerts()
+    const hooks = await loadPlugin(shell)
+
+    await hooks["session.start"]!({ sessionID: "test" }, {})
+
+    const output = { system: [] as string[] }
+    await hooks["experimental.chat.system.transform"]!({ model: {} as never }, output)
+
+    expect(output.system[0]).toContain("firing-alerts-critical: 2 (KubePodCrashLooping: payments-api, NodeFilesystemAlmostOutOfSpace: worker-3)")
+    expect(output.system[0]).toContain("firing-alerts-warning: 1 (TargetDown: user-workload-monitoring)")
+    expect(output.system[0]).toContain("firing-alerts-info: 1")
+  })
+
+  it("omits alert lines when no alerts are firing", async () => {
+    const shell = createConnectedShellWithNoAlerts()
+    const hooks = await loadPlugin(shell)
+
+    await hooks["session.start"]!({ sessionID: "test" }, {})
+
+    const output = { system: [] as string[] }
+    await hooks["experimental.chat.system.transform"]!({ model: {} as never }, output)
+
+    expect(output.system[0]).not.toContain("firing-alerts")
+    expect(output.system[0]).toContain("<cluster-context>")
+    expect(output.system[0]).toContain("cluster: api-cluster-example-com:6443")
+  })
+
+  it("alert query failure does not break context injection", async () => {
+    const shell = createConnectedShell()
+    const hooks = await loadPlugin(shell)
+
+    await hooks["session.start"]!({ sessionID: "test" }, {})
+
+    const output = { system: [] as string[] }
+    await hooks["experimental.chat.system.transform"]!({ model: {} as never }, output)
+
+    expect(output.system[0]).toContain("<cluster-context>")
+    expect(output.system[0]).toContain("cluster: api-cluster-example-com:6443")
+    expect(output.system[0]).toContain("version: 4.22.3")
+    expect(output.system[0]).not.toContain("firing-alerts")
+  })
+
+  it("formats critical and warning alerts with name:namespace, info shows count only", async () => {
+    const shell = createConnectedShellWithAlerts()
+    const hooks = await loadPlugin(shell)
+
+    await hooks["session.start"]!({ sessionID: "test" }, {})
+
+    const output = { system: [] as string[] }
+    await hooks["experimental.chat.system.transform"]!({ model: {} as never }, output)
+
+    const block = output.system[0]!
+    expect(block).toMatch(/firing-alerts-critical: 2 \(KubePodCrashLooping: payments-api, NodeFilesystemAlmostOutOfSpace: worker-3\)/)
+    expect(block).toMatch(/firing-alerts-warning: 1 \(TargetDown: user-workload-monitoring\)/)
+    expect(block).toMatch(/firing-alerts-info: 1/)
+    expect(block).not.toMatch(/firing-alerts-info:.*InfoAlert/)
   })
 })

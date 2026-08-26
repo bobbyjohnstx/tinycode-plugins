@@ -1,15 +1,34 @@
 import type { Hooks, PluginModule } from "tinycode-plugin"
 import { createOcClient } from "tinycode-plugin-redhat-shared/oc"
-import { queryClusterContext, type ClusterContext } from "./cluster-info"
+import { queryClusterContext, type ClusterContext, type AlertSummary } from "./cluster-info"
+
+function formatAlertLine(label: string, alerts: AlertSummary["critical"]): string {
+  const details = alerts.map((a) => `${a.name}: ${a.namespace || "cluster"}`).join(", ")
+  return `${label}: ${alerts.length} (${details})`
+}
 
 function formatContextBlock(ctx: ClusterContext): string {
-  return `<cluster-context>
-cluster: ${ctx.cluster}
-version: ${ctx.version}
-nodes: ${ctx.nodes}
-namespace: ${ctx.namespace}
-operators: [${ctx.operators.join(", ")}]
-</cluster-context>`
+  const lines = [
+    `cluster: ${ctx.cluster}`,
+    `version: ${ctx.version}`,
+    `nodes: ${ctx.nodes}`,
+    `namespace: ${ctx.namespace}`,
+    `operators: [${ctx.operators.join(", ")}]`,
+  ]
+
+  if (ctx.alerts) {
+    if (ctx.alerts.critical.length > 0) {
+      lines.push(formatAlertLine("firing-alerts-critical", ctx.alerts.critical))
+    }
+    if (ctx.alerts.warning.length > 0) {
+      lines.push(formatAlertLine("firing-alerts-warning", ctx.alerts.warning))
+    }
+    if (ctx.alerts.info > 0) {
+      lines.push(`firing-alerts-info: ${ctx.alerts.info}`)
+    }
+  }
+
+  return `<cluster-context>\n${lines.join("\n")}\n</cluster-context>`
 }
 
 export default {
