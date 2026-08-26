@@ -59,7 +59,7 @@ export function createTempoClient(config: {
     },
 
     async getTrace(traceId) {
-      const res = await client.get<TraceDetail>(`/api/traces/${traceId}`)
+      const res = await client.get<TraceDetail>(`/api/traces/${encodeURIComponent(traceId)}`)
       return res.data
     },
   }

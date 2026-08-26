@@ -60,13 +60,13 @@ export function createRhdhClient(baseUrl: string, apiToken?: string): RhdhClient
 
     async getEntity(kind: string, namespace: string, name: string): Promise<CatalogEntity> {
       const response = await api.get<CatalogEntity>(
-        `/api/catalog/entities/by-name/${kind}/${namespace}/${name}`,
+        `/api/catalog/entities/by-name/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`,
       )
       return response.data
     },
 
     async getTechDocs(namespace: string, kind: string, name: string): Promise<string> {
-      const url = `/api/techdocs/static/docs/${namespace}/${kind}/${name}/index.html`
+      const url = `/api/techdocs/static/docs/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/index.html`
       const response = await api.get<string>(url)
       return typeof response.data === "string" ? response.data : JSON.stringify(response.data)
     },

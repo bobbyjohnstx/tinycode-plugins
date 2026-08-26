@@ -35,7 +35,7 @@ describe("tinycode-plugin-lightwell", () => {
 
     it("loads with serviceAccountToken and returns tools", async () => {
       setupFetch([
-        { method: "GET", path: "/api/v1/packages/java/org.apache:commons/1.0", body: { found: true } },
+        { method: "GET", path: "/api/v1/packages/java/org.apache%3Acommons/1.0", body: { found: true } },
       ])
       const tools = await getTools(configuredOptions)
       const result = await tools.lightwell_check_package.execute(
@@ -51,7 +51,7 @@ describe("tinycode-plugin-lightwell", () => {
       setupFetch([
         {
           method: "GET",
-          path: "/api/v1/packages/java/org.springframework:spring-core/5.3.20",
+          path: "/api/v1/packages/java/org.springframework%3Aspring-core/5.3.20",
           body: {
             found: true,
             ecosystem: "java",
@@ -115,12 +115,12 @@ describe("tinycode-plugin-lightwell", () => {
       setupFetch([
         {
           method: "GET",
-          path: "/api/v1/packages/java/org.apache:commons-lang3/3.12.0",
+          path: "/api/v1/packages/java/org.apache%3Acommons-lang3/3.12.0",
           body: { found: true, patchAvailable: true, cveCount: 1 },
         },
         {
           method: "GET",
-          path: "/api/v1/packages/java/com.google:guava/31.1",
+          path: "/api/v1/packages/java/com.google%3Aguava/31.1",
           body: { found: true, patchAvailable: false, cveCount: 0 },
         },
       ])
@@ -289,7 +289,7 @@ flask>=2.3.0
       setupFetch([
         {
           method: "GET",
-          path: "/api/v1/provenance/java/org.apache:commons/3.12.0",
+          path: "/api/v1/provenance/java/org.apache%3Acommons/3.12.0",
           body: {
             verified: true,
             buildType: "maven",

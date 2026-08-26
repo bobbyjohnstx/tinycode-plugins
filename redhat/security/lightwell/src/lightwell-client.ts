@@ -65,21 +65,21 @@ export function createLightwellClient(baseUrl: string, token?: string): Lightwel
   return {
     async checkPackage(ecosystem: string, name: string, version: string): Promise<PackageCheckResult> {
       const response = await api.get<PackageCheckResult>(
-        `/api/v1/packages/${ecosystem}/${name}/${version}`,
+        `/api/v1/packages/${ecosystem}/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
       )
       return response.data
     },
 
     async queryOsv(ecosystem: string, name: string): Promise<OsvResult> {
       const response = await api.get<OsvResult>(
-        `/api/v1/osv/${ecosystem}/${name}`,
+        `/api/v1/osv/${ecosystem}/${encodeURIComponent(name)}`,
       )
       return response.data
     },
 
     async getProvenance(ecosystem: string, name: string, version: string): Promise<ProvenanceResult> {
       const response = await api.get<ProvenanceResult>(
-        `/api/v1/provenance/${ecosystem}/${name}/${version}`,
+        `/api/v1/provenance/${ecosystem}/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
       )
       return response.data
     },

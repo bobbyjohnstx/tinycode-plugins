@@ -194,7 +194,7 @@ describe("tinycode-plugin-quay", () => {
       setupFetch([
         {
           method: "GET",
-          path: "/api/v1/repository/redhat/ubi9/manifest/sha256:abc123",
+          path: "/api/v1/repository/redhat/ubi9/manifest/sha256%3Aabc123",
           body: {
             digest: "sha256:abc123",
             is_manifest_list: false,
@@ -229,7 +229,7 @@ describe("tinycode-plugin-quay", () => {
       setupFetch([
         {
           method: "GET",
-          path: "/api/v1/repository/redhat/ubi9/manifest/sha256:bad",
+          path: "/api/v1/repository/redhat/ubi9/manifest/sha256%3Abad",
           status: 404,
           body: { error: "not found" },
         },
@@ -248,7 +248,7 @@ describe("tinycode-plugin-quay", () => {
       setupFetch([
         {
           method: "GET",
-          path: "/api/v1/repository/redhat/ubi9/manifest/sha256:abc123/security",
+          path: "/api/v1/repository/redhat/ubi9/manifest/sha256%3Aabc123/security",
           body: {
             status: "scanned",
             data: {
@@ -304,7 +304,7 @@ describe("tinycode-plugin-quay", () => {
       setupFetch([
         {
           method: "GET",
-          path: "/api/v1/repository/redhat/ubi9/manifest/sha256:clean/security",
+          path: "/api/v1/repository/redhat/ubi9/manifest/sha256%3Aclean/security",
           body: {
             status: "scanned",
             data: { Layer: { Features: [] } },
@@ -332,7 +332,7 @@ describe("tinycode-plugin-quay", () => {
       setupFetch([
         {
           method: "GET",
-          path: "/api/v1/repository/redhat/ubi9/manifest/sha256:abc123/security",
+          path: "/api/v1/repository/redhat/ubi9/manifest/sha256%3Aabc123/security",
           status: 403,
           body: { error: "Forbidden" },
         },
@@ -351,7 +351,7 @@ describe("tinycode-plugin-quay", () => {
       setupFetch([
         {
           method: "GET",
-          path: "/api/v1/repository/redhat/ubi9/manifest/sha256:abc123/labels",
+          path: "/api/v1/repository/redhat/ubi9/manifest/sha256%3Aabc123/labels",
           body: {
             labels: [
               {
@@ -387,7 +387,7 @@ describe("tinycode-plugin-quay", () => {
       setupFetch([
         {
           method: "GET",
-          path: "/api/v1/repository/redhat/ubi9/manifest/sha256:nolabels/labels",
+          path: "/api/v1/repository/redhat/ubi9/manifest/sha256%3Anolabels/labels",
           body: { labels: [] },
         },
       ])
@@ -412,7 +412,7 @@ describe("tinycode-plugin-quay", () => {
       setupFetch([
         {
           method: "GET",
-          path: "/api/v1/repository/redhat/ubi9/manifest/sha256:abc123/labels",
+          path: "/api/v1/repository/redhat/ubi9/manifest/sha256%3Aabc123/labels",
           status: 500,
           body: { error: "server error" },
         },
