@@ -24,7 +24,7 @@ export type McpClient = {
 export function createMcpClient(config: McpClientConfig): McpClient {
   const client = createApiClient({
     baseUrl: config.serverUrl,
-    tokenFn: config.tokenFn ?? (async () => ""),
+    tokenFn: config.tokenFn ?? (async () => null),
   })
 
   async function rpcCall(method: string, params?: Record<string, unknown>): Promise<unknown> {

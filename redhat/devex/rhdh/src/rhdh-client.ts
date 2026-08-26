@@ -43,7 +43,7 @@ export type RhdhClient = {
 export function createRhdhClient(baseUrl: string, apiToken?: string): RhdhClient {
   const api: ApiClient = createApiClient({
     baseUrl,
-    tokenFn: async () => apiToken ?? "",
+    tokenFn: async () => apiToken ?? null,
   })
 
   return {

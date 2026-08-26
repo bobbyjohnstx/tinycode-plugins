@@ -41,7 +41,7 @@ export function createTempoClient(config: {
 }): TempoClient {
   const client = createApiClient({
     baseUrl: config.baseUrl,
-    tokenFn: config.tokenFn ?? (async () => ""),
+    tokenFn: config.tokenFn ?? (async () => null),
   })
 
   return {

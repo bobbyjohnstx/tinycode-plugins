@@ -398,7 +398,7 @@ export default {
 
     const apiClient = createApiClient({
       baseUrl: parsed.mlflowUrl,
-      tokenFn: async () => "",
+      tokenFn: async () => null,
     })
     const readClient = createMlflowReadClient({ mlflowUrl: parsed.mlflowUrl })
     const writeClient = createMlflowClient(apiClient)
