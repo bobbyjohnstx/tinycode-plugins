@@ -6,8 +6,7 @@ import type { ContentView, Erratum, Host, SatelliteClient } from "./satellite-cl
 const optionsSchema = z
   .object({
     satelliteUrl: z.string().url(),
-    username: z.string().optional(),
-    password: z.string().optional(),
+    token: z.string().optional(),
   })
   .optional()
 
@@ -200,13 +199,13 @@ export default {
     const result = optionsSchema.safeParse(options)
     const parsed = result.success ? result.data : undefined
 
-    if (!parsed?.satelliteUrl || !parsed.username || !parsed.password) {
+    if (!parsed?.satelliteUrl || !parsed.token) {
       return {
         tool: createUnconfiguredTools(),
       }
     }
 
-    const client = createSatelliteClient(parsed.satelliteUrl, parsed.username, parsed.password)
+    const client = createSatelliteClient(parsed.satelliteUrl, parsed.token)
 
     return {
       tool: createTools(client),
