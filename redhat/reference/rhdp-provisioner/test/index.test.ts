@@ -244,7 +244,8 @@ describe("tinycode-plugin-rhdp-provisioner", () => {
       expect(result).toContain("ready")
       expect(result).toContain("https://console.example.com")
       expect(result).toContain("admin")
-      expect(result).toContain("secret123")
+      expect(result).not.toContain("secret123")
+      expect(result).toContain("[REDACTED")
       expect(result).toContain("2026-01-16T10:00:00Z")
     })
 

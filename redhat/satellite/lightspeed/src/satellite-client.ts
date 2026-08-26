@@ -52,16 +52,11 @@ export type SatelliteClient = {
 
 export function createSatelliteClient(
   satelliteUrl: string,
-  username: string,
-  password: string,
+  token: string,
 ): SatelliteClient {
-  const basicAuth = btoa(`${username}:${password}`)
   const api: ApiClient = createApiClient({
     baseUrl: satelliteUrl,
-    tokenFn: async () => "",
-    headers: {
-      Authorization: `Basic ${basicAuth}`,
-    },
+    tokenFn: async () => token,
   })
 
   return {

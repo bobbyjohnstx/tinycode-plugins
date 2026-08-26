@@ -231,6 +231,50 @@ describe("tinycode-plugin-ocp-oauth", () => {
         metadata: { server },
       })
     })
+
+    it("does NOT include --insecure-skip-tls-verify by default", async () => {
+      const shell = createMockShell([
+        { match: /oc login.*--insecure-skip-tls-verify/, output: "flag present", exitCode: 1 },
+        { match: "oc login", output: "Login successful", exitCode: 0 },
+      ])
+      const input = createMockInput(shell)
+      const hooks = await plugin.server(input)
+      const method = hooks.auth!.methods[0]!
+      const result = await method.authorize!({
+        server: "https://api.example.com:6443",
+        token: "sha256~test",
+      })
+      expect(result.type).toBe("success")
+    })
+
+    it("includes --insecure-skip-tls-verify when option is true", async () => {
+      const shell = createMockShell([
+        { match: /oc login.*--insecure-skip-tls-verify/, output: "Login successful", exitCode: 0 },
+      ])
+      const input = createMockInput(shell)
+      const hooks = await plugin.server(input, { insecureSkipTlsVerify: true })
+      const method = hooks.auth!.methods[0]!
+      const result = await method.authorize!({
+        server: "https://api.example.com:6443",
+        token: "sha256~test",
+      })
+      expect(result.type).toBe("success")
+    })
+
+    it("does NOT include --insecure-skip-tls-verify when option is false", async () => {
+      const shell = createMockShell([
+        { match: /oc login.*--insecure-skip-tls-verify/, output: "flag present", exitCode: 1 },
+        { match: "oc login", output: "Login successful", exitCode: 0 },
+      ])
+      const input = createMockInput(shell)
+      const hooks = await plugin.server(input, { insecureSkipTlsVerify: false })
+      const method = hooks.auth!.methods[0]!
+      const result = await method.authorize!({
+        server: "https://api.example.com:6443",
+        token: "sha256~test",
+      })
+      expect(result.type).toBe("success")
+    })
   })
 
   describe("shell.env", () => {

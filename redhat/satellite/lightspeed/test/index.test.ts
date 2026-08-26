@@ -10,9 +10,8 @@ afterEach(() => {
 })
 
 const satelliteUrl = "https://satellite.example.com"
-const username = "admin"
-const password = "changeme"
-const configuredOptions = { satelliteUrl, username, password }
+const token = "test-satellite-token"
+const configuredOptions = { satelliteUrl, token }
 
 function setupFetch(routes: MockRoute[]) {
   globalThis.fetch = createMockFetch(routes)
@@ -41,14 +40,8 @@ describe("tinycode-plugin-satellite-lightspeed", () => {
       expect(result).toContain("not configured")
     })
 
-    it("returns config-needed message when username missing", async () => {
-      const tools = await getTools({ satelliteUrl, password })
-      const result = await tools.satellite_query.execute({ question: "test" }, {} as never)
-      expect(result).toContain("not configured")
-    })
-
-    it("returns config-needed message when password missing", async () => {
-      const tools = await getTools({ satelliteUrl, username })
+    it("returns config-needed message when token missing", async () => {
+      const tools = await getTools({ satelliteUrl })
       const result = await tools.satellite_query.execute({ question: "test" }, {} as never)
       expect(result).toContain("not configured")
     })

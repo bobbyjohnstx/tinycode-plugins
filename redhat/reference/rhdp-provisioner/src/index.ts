@@ -44,7 +44,7 @@ function formatProvisionStatus(status: ProvisionStatus): string {
   if (status.apiUrl) parts.push(`API: ${status.apiUrl}`)
   if (status.credentials) {
     parts.push(`Username: ${status.credentials.username}`)
-    parts.push(`Password: ${status.credentials.password}`)
+    parts.push(`Password: [REDACTED -- view credentials at ${status.consoleUrl ?? "the provisioning console"}]`)
   }
   if (status.expiresAt) parts.push(`Expires: ${status.expiresAt}`)
   if (status.error) parts.push(`Error: ${status.error}`)
