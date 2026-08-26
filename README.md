@@ -77,7 +77,7 @@ Plugins not listed above require no configuration. When a plugin with optional c
 - `obs_logs` — Query Loki logs with LogQL or namespace/pod/severity filters
 - `obs_traces` — Search Tempo traces by service, operation, duration
 - `obs_trace_detail` — Full span tree for a trace ID
-- `obs_network_flows` — Network flow data from Network Observability
+- `obs_flow_collectors` — List FlowCollector resources from Network Observability
 - `obs_dashboards` — List available Grafana dashboards
 
 ### Security

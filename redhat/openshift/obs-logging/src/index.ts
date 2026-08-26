@@ -193,27 +193,11 @@ export function createOcTools(
   oc: OcClient,
 ): Record<string, ToolDefinition> {
   return {
-    obs_network_flows: {
+    obs_flow_collectors: {
       description:
-        "Query network flows from the Network Observability operator (NetObserv FlowCollector).",
-      args: {
-        namespace: z
-          .string()
-          .optional()
-          .describe("Filter flows by namespace"),
-        srcPod: z.string().optional().describe("Filter by source pod"),
-        destPod: z.string().optional().describe("Filter by destination pod"),
-        since: z
-          .string()
-          .optional()
-          .describe("Time range (e.g. '1h', '30m')"),
-      },
-      async execute(args: {
-        namespace?: string
-        srcPod?: string
-        destPod?: string
-        since?: string
-      }) {
+        "List FlowCollector resources from the Network Observability operator (NetObserv). Shows agent type, log types, and readiness.",
+      args: {},
+      async execute() {
         try {
           const result = await oc.get<{
             items: Array<{
@@ -230,7 +214,7 @@ export function createOcTools(
             return "No FlowCollector resources found. Network Observability may not be installed."
           }
 
-          const lines = ["Network Flow Collectors:", ""]
+          const lines = ["Flow Collectors:", ""]
           for (const fc of result.items) {
             const name = fc.metadata.name
             const agentType = fc.spec.agent?.type ?? "unknown"
@@ -243,16 +227,9 @@ export function createOcTools(
             )
           }
 
-          if (args.namespace || args.srcPod || args.destPod) {
-            lines.push("")
-            lines.push(
-              `Filter: namespace=${args.namespace ?? "*"}, src=${args.srcPod ?? "*"}, dest=${args.destPod ?? "*"}`,
-            )
-          }
-
           return lines.join("\n")
         } catch (error) {
-          return `Failed to query network flows: ${error instanceof Error ? error.message : String(error)}`
+          return `Failed to list flow collectors: ${error instanceof Error ? error.message : String(error)}`
         }
       },
     },

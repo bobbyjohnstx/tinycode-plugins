@@ -4,6 +4,8 @@ import {
   createMockInput,
 } from "tinycode-plugin-redhat-shared/test-utils"
 import plugin from "../src/index"
+import { createObsTools } from "../src/obs-tools"
+import type { OcClient } from "tinycode-plugin-redhat-shared/oc"
 
 describe("tinycode-plugin-ocp-cluster-ops", () => {
   it("loads without error", async () => {
@@ -298,13 +300,43 @@ describe("tinycode-plugin-ocp-cluster-ops", () => {
   })
 
   describe("ocp_status", () => {
-    it("returns cluster status with nodes, operators, and version", async () => {
+    it("returns summarized cluster status with node/operator counts", async () => {
       const nodesData = {
-        items: [{ metadata: { name: "node-1" }, status: { conditions: [] } }],
+        items: [
+          {
+            metadata: { name: "node-1" },
+            status: {
+              conditions: [{ type: "Ready", status: "True" }],
+            },
+          },
+          {
+            metadata: { name: "node-2" },
+            status: {
+              conditions: [{ type: "Ready", status: "False" }],
+            },
+          },
+        ],
       }
       const operatorsData = {
         items: [
-          { metadata: { name: "authentication" }, status: { conditions: [] } },
+          {
+            metadata: { name: "authentication" },
+            status: {
+              conditions: [
+                { type: "Available", status: "True" },
+                { type: "Degraded", status: "False" },
+              ],
+            },
+          },
+          {
+            metadata: { name: "dns" },
+            status: {
+              conditions: [
+                { type: "Available", status: "True" },
+                { type: "Degraded", status: "True" },
+              ],
+            },
+          },
         ],
       }
       const versionData = {
@@ -330,15 +362,14 @@ describe("tinycode-plugin-ocp-cluster-ops", () => {
       ])
       const input = createMockInput(shell)
       const hooks = await plugin.server(input, undefined)
-      const result = await hooks.tool!.ocp_status!.execute(
+      const result = (await hooks.tool!.ocp_status!.execute(
         {},
         undefined as any,
-      )
-      expect(result).toContain("Nodes")
-      expect(result).toContain("node-1")
-      expect(result).toContain("Cluster Operators")
-      expect(result).toContain("authentication")
-      expect(result).toContain("Version")
+      )) as string
+      expect(result).toContain("Nodes: 1/2 Ready")
+      expect(result).toContain("node-1, node-2")
+      expect(result).toContain("Cluster Operators: 2/2 Available")
+      expect(result).toContain("Degraded: dns")
       expect(result).toContain("4.14.5")
     })
 
@@ -355,10 +386,10 @@ describe("tinycode-plugin-ocp-cluster-ops", () => {
       ])
       const input = createMockInput(shell)
       const hooks = await plugin.server(input, undefined)
-      const result = await hooks.tool!.ocp_status!.execute(
+      const result = (await hooks.tool!.ocp_status!.execute(
         {},
         undefined as any,
-      )
+      )) as string
       expect(result).toContain("Version")
       expect(result).not.toContain("Nodes")
     })
@@ -383,6 +414,148 @@ describe("tinycode-plugin-ocp-cluster-ops", () => {
         expect(tool.description).toBeTruthy()
         expect(typeof tool.description).toBe("string")
       }
+    })
+  })
+
+  describe("ocp_get_resources truncation", () => {
+    it("truncates when items exceed default limit of 50", async () => {
+      const items = Array.from({ length: 60 }, (_, i) => ({
+        metadata: { name: `pod-${i}` },
+        status: { phase: "Running" },
+      }))
+      const mockData = { items }
+      const shell = createMockShell([
+        {
+          match: "oc get pods",
+          output: JSON.stringify(mockData),
+          json: mockData,
+        },
+      ])
+      const input = createMockInput(shell)
+      const hooks = await plugin.server(input, undefined)
+      const result = (await hooks.tool!.ocp_get_resources!.execute(
+        { resource: "pods" },
+        undefined as any,
+      )) as string
+      expect(result).toContain("Showing 50 of 60 items")
+      expect(result).toContain("pod-0")
+      expect(result).not.toContain("pod-55")
+    })
+
+    it("respects custom limit parameter", async () => {
+      const items = Array.from({ length: 10 }, (_, i) => ({
+        metadata: { name: `pod-${i}` },
+      }))
+      const mockData = { items }
+      const shell = createMockShell([
+        {
+          match: "oc get pods",
+          output: JSON.stringify(mockData),
+          json: mockData,
+        },
+      ])
+      const input = createMockInput(shell)
+      const hooks = await plugin.server(input, undefined)
+      const result = (await hooks.tool!.ocp_get_resources!.execute(
+        { resource: "pods", limit: 3 },
+        undefined as any,
+      )) as string
+      expect(result).toContain("Showing 3 of 10 items")
+    })
+
+    it("does not truncate when items are within limit", async () => {
+      const items = [{ metadata: { name: "pod-0" } }]
+      const mockData = { items }
+      const shell = createMockShell([
+        {
+          match: "oc get pods",
+          output: JSON.stringify(mockData),
+          json: mockData,
+        },
+      ])
+      const input = createMockInput(shell)
+      const hooks = await plugin.server(input, undefined)
+      const result = (await hooks.tool!.ocp_get_resources!.execute(
+        { resource: "pods" },
+        undefined as any,
+      )) as string
+      expect(result).not.toContain("Showing")
+      expect(result).toContain("pod-0")
+    })
+  })
+
+  describe("ocp_error_rate (parseDuration)", () => {
+    function createMockOcClient(
+      events: unknown[] = [],
+    ): OcClient {
+      return {
+        isAvailable: async () => true,
+        isLoggedIn: async () => true,
+        get: async () => ({ items: events }),
+        apply: async () => "",
+        logs: async () => "",
+        describe: async () => "",
+        whoami: async () => "user",
+        token: async () => "token",
+        version: async () => ({
+          clientVersion: { major: "4", minor: "14" },
+        }),
+        raw: async () => "",
+      } as unknown as OcClient
+    }
+
+    it("returns error for invalid duration format", async () => {
+      const oc = createMockOcClient([
+        {
+          reason: "BackOff",
+          type: "Warning",
+          involvedObject: { name: "pod-1", kind: "Pod" },
+          count: 1,
+          lastTimestamp: new Date().toISOString(),
+        },
+      ])
+      const tools = createObsTools(oc)
+      const result = await tools.ocp_error_rate!.execute(
+        { namespace: "test", since: "xyz" },
+        undefined as any,
+      )
+      expect(result).toContain("Invalid duration format")
+      expect(result).toContain("xyz")
+    })
+
+    it("supports day and week duration units", async () => {
+      const now = Date.now()
+      const oc = createMockOcClient([
+        {
+          reason: "BackOff",
+          type: "Warning",
+          involvedObject: { name: "pod-1", kind: "Pod" },
+          count: 1,
+          lastTimestamp: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+        {
+          reason: "OOMKilled",
+          type: "Warning",
+          involvedObject: { name: "pod-2", kind: "Pod" },
+          count: 1,
+          lastTimestamp: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+      ])
+      const tools = createObsTools(oc)
+
+      const result7d = (await tools.ocp_error_rate!.execute(
+        { namespace: "test", since: "7d" },
+        undefined as any,
+      )) as string
+      expect(result7d).toContain("BackOff")
+      expect(result7d).not.toContain("OOMKilled")
+
+      const result2w = (await tools.ocp_error_rate!.execute(
+        { namespace: "test", since: "2w" },
+        undefined as any,
+      )) as string
+      expect(result2w).toContain("BackOff")
+      expect(result2w).toContain("OOMKilled")
     })
   })
 })
