@@ -5,3 +5,6 @@ dist/
 .env.*
 !.env.example
 .DS_Store
+docs/superpowers/
+docs/tinycode_redhat_plugin_ideas*.md
+docs/v2-implementation-plan.md
