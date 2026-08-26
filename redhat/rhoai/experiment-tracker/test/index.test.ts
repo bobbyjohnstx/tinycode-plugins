@@ -125,7 +125,7 @@ describe("tinycode-plugin-rhoai-experiments", () => {
 
       if (!route) return Promise.resolve(new Response("Not Found", { status: 404 }))
       return Promise.resolve(
-        new Response(JSON.stringify(route.body), { status: route.status ?? 200 }),
+        new Response(JSON.stringify(route.body), { status: route.status ?? 200, headers: { "content-type": "application/json" } }),
       )
     }) as unknown as typeof fetch
 
@@ -175,7 +175,7 @@ describe("tinycode-plugin-rhoai-experiments", () => {
 
       if (!route) return Promise.resolve(new Response("Not Found", { status: 404 }))
       return Promise.resolve(
-        new Response(JSON.stringify(route.body), { status: route.status ?? 200 }),
+        new Response(JSON.stringify(route.body), { status: route.status ?? 200, headers: { "content-type": "application/json" } }),
       )
     }) as unknown as typeof fetch
 
@@ -215,7 +215,7 @@ describe("tinycode-plugin-rhoai-experiments", () => {
 
       if (!route) return Promise.resolve(new Response("Not Found", { status: 404 }))
       return Promise.resolve(
-        new Response(JSON.stringify(route.body), { status: route.status ?? 200 }),
+        new Response(JSON.stringify(route.body), { status: route.status ?? 200, headers: { "content-type": "application/json" } }),
       )
     }) as unknown as typeof fetch
 
@@ -307,7 +307,7 @@ describe("tinycode-plugin-rhoai-experiments", () => {
 
       if (!route) return Promise.resolve(new Response("Not Found", { status: 404 }))
       return Promise.resolve(
-        new Response(JSON.stringify(route.body), { status: route.status ?? 200 }),
+        new Response(JSON.stringify(route.body), { status: route.status ?? 200, headers: { "content-type": "application/json" } }),
       )
     }) as unknown as typeof fetch
 
@@ -441,7 +441,7 @@ describe("tinycode-plugin-rhoai-experiments", () => {
 
       if (!route) return Promise.resolve(new Response("Not Found", { status: 404 }))
       return Promise.resolve(
-        new Response(JSON.stringify(route.body), { status: route.status ?? 200 }),
+        new Response(JSON.stringify(route.body), { status: route.status ?? 200, headers: { "content-type": "application/json" } }),
       )
     }) as unknown as typeof fetch
 
@@ -500,7 +500,7 @@ describe("tinycode-plugin-rhoai-experiments", () => {
 
       if (!route) return Promise.resolve(new Response("Not Found", { status: 404 }))
       return Promise.resolve(
-        new Response(JSON.stringify(route.body), { status: route.status ?? 200 }),
+        new Response(JSON.stringify(route.body), { status: route.status ?? 200, headers: { "content-type": "application/json" } }),
       )
     }) as unknown as typeof fetch
 
@@ -646,7 +646,7 @@ describe("tinycode-plugin-rhoai-experiments", () => {
 
       if (!route) return Promise.resolve(new Response("Not Found", { status: 404 }))
       return Promise.resolve(
-        new Response(JSON.stringify(route.body), { status: route.status ?? 200 }),
+        new Response(JSON.stringify(route.body), { status: route.status ?? 200, headers: { "content-type": "application/json" } }),
       )
     }) as unknown as typeof fetch
 
@@ -691,7 +691,7 @@ describe("tinycode-plugin-rhoai-experiments", () => {
 
       if (!route) return Promise.resolve(new Response("Not Found", { status: 404 }))
       return Promise.resolve(
-        new Response(JSON.stringify(route.body), { status: route.status ?? 200 }),
+        new Response(JSON.stringify(route.body), { status: route.status ?? 200, headers: { "content-type": "application/json" } }),
       )
     }) as unknown as typeof fetch
 

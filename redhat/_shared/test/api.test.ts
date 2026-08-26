@@ -96,7 +96,10 @@ describe("createApiClient", () => {
       if (fetchCallCount === 1) {
         return new Response("Unauthorized", { status: 401 })
       }
-      return new Response(JSON.stringify({ data: "ok" }), { status: 200 })
+      return new Response(JSON.stringify({ data: "ok" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
     }) as unknown as typeof fetch
 
     const client = createApiClient({
@@ -150,6 +153,181 @@ describe("createApiClient", () => {
       expect(true).toBe(false)
     } catch (error) {
       expect((error as Error).message).toContain("500")
+    }
+  })
+
+  it("skips Authorization header when tokenFn returns null", async () => {
+    const requests: Array<{ init?: RequestInit }> = []
+    const mockFetch = createMockFetch([{ path: "/test", body: { ok: true } }])
+    globalThis.fetch = ((...args: Parameters<typeof fetch>) => {
+      requests.push({ init: args[1] })
+      return mockFetch(...args)
+    }) as unknown as typeof fetch
+
+    const client = createApiClient({
+      baseUrl: "https://api.example.com",
+      tokenFn: async () => null,
+    })
+
+    await client.get("/test")
+
+    const headers = requests[0]!.init?.headers as Record<string, string>
+    expect(headers.Authorization).toBeUndefined()
+  })
+
+  it("includes Authorization header when tokenFn returns a value", async () => {
+    const requests: Array<{ init?: RequestInit }> = []
+    const mockFetch = createMockFetch([{ path: "/test", body: { ok: true } }])
+    globalThis.fetch = ((...args: Parameters<typeof fetch>) => {
+      requests.push({ init: args[1] })
+      return mockFetch(...args)
+    }) as unknown as typeof fetch
+
+    const client = createApiClient({
+      baseUrl: "https://api.example.com",
+      tokenFn: async () => "my-token",
+    })
+
+    await client.get("/test")
+
+    const headers = requests[0]!.init?.headers as Record<string, string>
+    expect(headers.Authorization).toBe("Bearer my-token")
+  })
+
+  it("aborts request after timeout", async () => {
+    globalThis.fetch = ((_input: string | URL | Request, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        if (init?.signal) {
+          init.signal.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted.", "AbortError"))
+          })
+        }
+      })
+    ) as unknown as typeof fetch
+
+    const client = createApiClient({
+      baseUrl: "https://api.example.com",
+      tokenFn: async () => "token",
+      timeoutMs: 50,
+      maxRetries: 0,
+    })
+
+    try {
+      await client.get("/slow")
+      expect(true).toBe(false)
+    } catch (error) {
+      expect((error as Error).message).toContain("Network error")
+    }
+  })
+
+  it("throws descriptive error when response is HTML", async () => {
+    globalThis.fetch = (async () =>
+      new Response("<html><body>Login Required</body></html>", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      })
+    ) as unknown as typeof fetch
+
+    const client = createApiClient({
+      baseUrl: "https://api.example.com",
+      tokenFn: async () => "token",
+    })
+
+    try {
+      await client.get("/test")
+      expect(true).toBe(false)
+    } catch (error) {
+      expect((error as Error).message).toContain("Expected JSON")
+      expect((error as Error).message).toContain("text/html")
+      expect((error as Error).message).toContain("Login Required")
+    }
+  })
+
+  it("throws descriptive error when Content-Type is missing", async () => {
+    globalThis.fetch = (async () =>
+      new Response("plain text", {
+        status: 200,
+        headers: {},
+      })
+    ) as unknown as typeof fetch
+
+    const client = createApiClient({
+      baseUrl: "https://api.example.com",
+      tokenFn: async () => "token",
+    })
+
+    try {
+      await client.get("/test")
+      expect(true).toBe(false)
+    } catch (error) {
+      expect((error as Error).message).toContain("unknown content type")
+    }
+  })
+
+  it("retries on ECONNRESET", async () => {
+    let fetchCallCount = 0
+    globalThis.fetch = (async () => {
+      fetchCallCount++
+      if (fetchCallCount === 1) {
+        const err = new Error("connect ECONNRESET")
+        throw err
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    }) as unknown as typeof fetch
+
+    const client = createApiClient({
+      baseUrl: "https://api.example.com",
+      tokenFn: async () => "token",
+    })
+
+    const result = await client.get("/test")
+    expect(fetchCallCount).toBe(2)
+    expect(result.data).toEqual({ ok: true })
+  })
+
+  it("does not retry on non-transient errors", async () => {
+    let fetchCallCount = 0
+    globalThis.fetch = (async () => {
+      fetchCallCount++
+      throw new TypeError("Invalid URL")
+    }) as unknown as typeof fetch
+
+    const client = createApiClient({
+      baseUrl: "https://api.example.com",
+      tokenFn: async () => "token",
+    })
+
+    try {
+      await client.get("/test")
+      expect(true).toBe(false)
+    } catch (error) {
+      expect(fetchCallCount).toBe(1)
+      expect((error as Error).message).toContain("Network error after 1 attempt")
+    }
+  })
+
+  it("throws after exhausting retries on transient errors", async () => {
+    let fetchCallCount = 0
+    globalThis.fetch = (async () => {
+      fetchCallCount++
+      throw new Error("connect ECONNRESET")
+    }) as unknown as typeof fetch
+
+    const client = createApiClient({
+      baseUrl: "https://api.example.com",
+      tokenFn: async () => "token",
+      maxRetries: 2,
+    })
+
+    try {
+      await client.get("/test")
+      expect(true).toBe(false)
+    } catch (error) {
+      expect(fetchCallCount).toBe(3)
+      expect((error as Error).message).toContain("Network error after 3 attempt")
     }
   })
 })

@@ -115,10 +115,15 @@ export function createMockFetch(routes: MockRoute[]): typeof fetch {
       return Promise.resolve(new Response("Not Found", { status: 404 }))
     }
 
+    const responseHeaders: Record<string, string> = {
+      "content-type": "application/json",
+      ...route.headers,
+    }
+
     return Promise.resolve(
       new Response(JSON.stringify(route.body), {
         status: route.status ?? 200,
-        headers: route.headers,
+        headers: responseHeaders,
       }),
     )
   }) as typeof fetch

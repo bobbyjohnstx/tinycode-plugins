@@ -354,7 +354,7 @@ describe("tinycode-plugin-obs-metrics", () => {
                 fingerprint: "bbb",
               },
             ]),
-            { status: 200 },
+            { status: 200, headers: { "content-type": "application/json" } },
           ),
         )) as typeof fetch
 

@@ -168,7 +168,7 @@ describe("tinycode-plugin-rhoai-mcp-bridge", () => {
             id: 1,
             result: { tools: [{ name: "test-tool", description: "A tool", inputSchema: {} }] },
           }),
-          { status: 200 },
+          { status: 200, headers: { "content-type": "application/json" } },
         )
       }) as unknown as typeof fetch
 

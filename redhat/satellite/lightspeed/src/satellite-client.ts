@@ -58,7 +58,7 @@ export function createSatelliteClient(
   const basicAuth = btoa(`${username}:${password}`)
   const api: ApiClient = createApiClient({
     baseUrl: satelliteUrl,
-    tokenFn: async () => "",
+    tokenFn: async () => null,
     headers: {
       Authorization: `Basic ${basicAuth}`,
     },

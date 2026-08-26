@@ -135,7 +135,10 @@ describe("createConsoleApiClient", () => {
       if (url.includes("sso.redhat.com")) {
         return new Response(JSON.stringify(validTokenResponse), { status: 200 })
       }
-      return new Response(JSON.stringify({ advisories: [] }), { status: 200 })
+      return new Response(JSON.stringify({ advisories: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
     }) as unknown as typeof fetch
 
     const apiClient = createConsoleApiClient(
@@ -165,7 +168,10 @@ describe("createConsoleApiClient", () => {
       if (url.includes("sso.redhat.com")) {
         return new Response(JSON.stringify(validTokenResponse), { status: 200 })
       }
-      return new Response(JSON.stringify({}), { status: 200 })
+      return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
     }) as unknown as typeof fetch
 
     const apiClient = createConsoleApiClient(
