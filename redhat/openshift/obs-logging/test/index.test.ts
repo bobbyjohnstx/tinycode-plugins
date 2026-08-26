@@ -54,7 +54,7 @@ describe("tinycode-plugin-obs-logging", () => {
       expect(tools.obs_logs).toBeDefined()
       expect(tools.obs_traces).toBeDefined()
       expect(tools.obs_trace_detail).toBeDefined()
-      expect(tools.obs_network_flows).toBeDefined()
+      expect(tools.obs_flow_collectors).toBeDefined()
       expect(tools.obs_dashboards).toBeDefined()
     })
 
@@ -66,7 +66,7 @@ describe("tinycode-plugin-obs-logging", () => {
       expect(tools.obs_logs.description).toBeTruthy()
       expect(tools.obs_traces.description).toBeTruthy()
       expect(tools.obs_trace_detail.description).toBeTruthy()
-      expect(tools.obs_network_flows.description).toBeTruthy()
+      expect(tools.obs_flow_collectors.description).toBeTruthy()
       expect(tools.obs_dashboards.description).toBeTruthy()
     })
   })
@@ -281,8 +281,8 @@ describe("tinycode-plugin-obs-logging", () => {
     })
   })
 
-  describe("obs_network_flows", () => {
-    it("returns network flows", async () => {
+  describe("obs_flow_collectors", () => {
+    it("lists flow collectors", async () => {
       const shell = createMockShell([
         {
           match: "flowcollectors.flows.netobserv.io",
@@ -318,11 +318,11 @@ describe("tinycode-plugin-obs-logging", () => {
       ])
       const oc = createOcClient(shell)
       const tools = createOcTools(oc)
-      const result = (await tools.obs_network_flows.execute(
-        { namespace: "payments" },
+      const result = (await tools.obs_flow_collectors.execute(
+        {},
         {} as never,
       )) as string
-      expect(result).toContain("Network Flow Collectors")
+      expect(result).toContain("Flow Collectors")
       expect(result).toContain("cluster")
       expect(result).toContain("eBPF")
       expect(result).toContain("FLOWS")
@@ -339,11 +339,11 @@ describe("tinycode-plugin-obs-logging", () => {
       ])
       const oc = createOcClient(shell)
       const tools = createOcTools(oc)
-      const result = (await tools.obs_network_flows.execute(
+      const result = (await tools.obs_flow_collectors.execute(
         {},
         {} as never,
       )) as string
-      expect(result).toContain("Failed to query network flows")
+      expect(result).toContain("Failed to list flow collectors")
     })
   })
 

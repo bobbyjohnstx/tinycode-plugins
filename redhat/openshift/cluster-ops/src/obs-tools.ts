@@ -1,6 +1,7 @@
 import type { ToolDefinition } from "tinycode-plugin"
 import { OcError } from "tinycode-plugin-redhat-shared/oc"
 import type { OcClient } from "tinycode-plugin-redhat-shared/oc"
+import { parseDuration } from "tinycode-plugin-redhat-shared/promql"
 import { z } from "zod"
 
 type ResourceQuotaList = {
@@ -185,15 +186,18 @@ export function createObsTools(
           })
           let events = result.items
           if (args.since) {
-            const durationMs = parseDuration(args.since)
-            if (durationMs > 0) {
-              const cutoff = Date.now() - durationMs
-              events = events.filter((e) => {
-                const ts = e.lastTimestamp ?? e.eventTime
-                if (!ts) return true
-                return new Date(ts).getTime() >= cutoff
-              })
+            let durationMs: number
+            try {
+              durationMs = parseDuration(args.since)
+            } catch {
+              return `Invalid duration format: "${args.since}". Use e.g. "30s", "5m", "1h", "7d", "1w"`
             }
+            const cutoff = Date.now() - durationMs
+            events = events.filter((e) => {
+              const ts = e.lastTimestamp ?? e.eventTime
+              if (!ts) return true
+              return new Date(ts).getTime() >= cutoff
+            })
           }
 
           if (events.length === 0) {
@@ -243,14 +247,4 @@ export function createObsTools(
       },
     },
   }
-}
-
-function parseDuration(duration: string): number {
-  const match = duration.match(/^(\d+)(h|m|s)$/)
-  if (!match) return 0
-  const value = parseInt(match[1]!, 10)
-  const unit = match[2]!
-  if (unit === "h") return value * 60 * 60 * 1000
-  if (unit === "m") return value * 60 * 1000
-  return value * 1000
 }
