@@ -187,4 +187,71 @@ describe("createConsoleApiClient", () => {
       "https://staging.console.redhat.com/api/cost-management/v1/reports",
     )
   })
+
+  describe("shared auth client", () => {
+    it("reuses provided authClient instead of creating a new one", async () => {
+      const requests: Array<{ url: string }> = []
+      globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+        const url = String(args[0])
+        requests.push({ url })
+
+        if (url.includes("sso.redhat.com")) {
+          return new Response(JSON.stringify(validTokenResponse), { status: 200 })
+        }
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      }) as unknown as typeof fetch
+
+      const authClient = createConsoleAuthClient({ offlineToken: "tok" })
+      const client1 = createConsoleApiClient(
+        { offlineToken: "tok" },
+        "/api/insights/v1",
+        authClient,
+      )
+      const client2 = createConsoleApiClient(
+        { offlineToken: "tok" },
+        "/api/vulnerability/v1",
+        authClient,
+      )
+
+      await client1.get("/advisories")
+      await client2.get("/cves")
+
+      const ssoCalls = requests.filter((r) => r.url.includes("sso.redhat.com"))
+      expect(ssoCalls).toHaveLength(1)
+    })
+
+    it("creates its own auth client when none provided", async () => {
+      const requests: Array<{ url: string }> = []
+      globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+        const url = String(args[0])
+        requests.push({ url })
+
+        if (url.includes("sso.redhat.com")) {
+          return new Response(JSON.stringify(validTokenResponse), { status: 200 })
+        }
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      }) as unknown as typeof fetch
+
+      const client1 = createConsoleApiClient(
+        { offlineToken: "tok" },
+        "/api/insights/v1",
+      )
+      const client2 = createConsoleApiClient(
+        { offlineToken: "tok" },
+        "/api/vulnerability/v1",
+      )
+
+      await client1.get("/advisories")
+      await client2.get("/cves")
+
+      const ssoCalls = requests.filter((r) => r.url.includes("sso.redhat.com"))
+      expect(ssoCalls).toHaveLength(2)
+    })
+  })
 })

@@ -1,7 +1,10 @@
 import type { Hooks, PluginModule, ToolDefinition } from "tinycode-plugin"
 import { z } from "zod"
 import { createOcClient } from "tinycode-plugin-redhat-shared/oc"
-import { createConsoleApiClient } from "tinycode-plugin-redhat-shared/console-auth"
+import {
+  createConsoleAuthClient,
+  createConsoleApiClient,
+} from "tinycode-plugin-redhat-shared/console-auth"
 import { createCoreTools } from "./core-tools"
 import { createGitOpsTools } from "./gitops-tools"
 import {
@@ -26,13 +29,18 @@ export default {
 
     let insightsTools: Record<string, ToolDefinition>
     if (opts?.consoleOfflineToken && opts.clusterId) {
+      const authClient = createConsoleAuthClient({
+        offlineToken: opts.consoleOfflineToken,
+      })
       const insightsClient = createConsoleApiClient(
         { offlineToken: opts.consoleOfflineToken },
         "/api/insights/v1",
+        authClient,
       )
       const vulnerabilityClient = createConsoleApiClient(
         { offlineToken: opts.consoleOfflineToken },
         "/api/vulnerability/v1",
+        authClient,
       )
       insightsTools = createInsightsTools(
         insightsClient,

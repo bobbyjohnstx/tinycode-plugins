@@ -77,9 +77,10 @@ export function createConsoleAuthClient(config: ConsoleAuthConfig): ConsoleAuthC
 export function createConsoleApiClient(
   config: ConsoleAuthConfig,
   servicePath: string,
+  sharedAuthClient?: ConsoleAuthClient,
 ): ApiClient {
   const apiBaseUrl = config.apiBaseUrl ?? DEFAULT_API_BASE_URL
-  const authClient = createConsoleAuthClient(config)
+  const authClient = sharedAuthClient ?? createConsoleAuthClient(config)
 
   return createApiClient({
     baseUrl: `${apiBaseUrl}${servicePath}`,
