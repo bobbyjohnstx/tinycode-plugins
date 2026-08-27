@@ -132,7 +132,7 @@ export function createCatalogTools(
         return results
           .map(
             (api) =>
-              `${api.name} (${api.version}) — ${api.description} [${api.basePath}]`,
+              `${api.name} (${api.version}) [${api.platform}] — ${api.description} [${api.basePath}]`,
           )
           .join("\n")
       },

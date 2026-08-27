@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { createMockInput } from "tinycode-plugin-redhat-shared/test-utils"
 import plugin from "../src/index"
-import { searchCatalog, parseOpenApiEndpoints } from "../src/catalog-client"
+import { API_CATALOG, searchCatalog, parseOpenApiEndpoints } from "../src/catalog-client"
 
 let tempDir: string
 
@@ -82,7 +82,7 @@ describe("tinycode-plugin-rh-api-catalog", () => {
   })
 
   describe("rh_api_list", () => {
-    it("lists all APIs", async () => {
+    it("lists all APIs with platform tags", async () => {
       const tools = await getTools(undefined)
       const result = (await tools.rh_api_list.execute(
         {},
@@ -91,6 +91,9 @@ describe("tinycode-plugin-rh-api-catalog", () => {
       expect(result).toContain("cost-management")
       expect(result).toContain("insights")
       expect(result).toContain("vulnerability")
+      expect(result).toContain("[both]")
+      expect(result).toContain("[rhel]")
+      expect(result).toContain("[ocp]")
     })
 
     it("filters by search term", async () => {
@@ -186,6 +189,19 @@ describe("tinycode-plugin-rh-api-catalog", () => {
   })
 
   describe("catalog-client", () => {
+    it("every API_CATALOG entry has a valid platform field", () => {
+      const validPlatforms = ["ocp", "rhel", "both"]
+      for (const entry of API_CATALOG) {
+        expect(validPlatforms).toContain(entry.platform)
+      }
+    })
+
+    it("searchCatalog for ocp returns ocp-vulnerability and gathering", () => {
+      const results = searchCatalog("ocp")
+      expect(results.some((r) => r.name === "ocp-vulnerability")).toBe(true)
+      expect(results.some((r) => r.name === "gathering")).toBe(true)
+    })
+
     it("searchCatalog filters correctly", () => {
       const results = searchCatalog("cost")
       expect(results.length).toBe(1)
