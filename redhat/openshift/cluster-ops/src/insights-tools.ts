@@ -139,7 +139,7 @@ export function createInsightsTools(
 
     ocp_insights_cves: {
       description:
-        "Get CVE exposure for this cluster from Red Hat Insights Vulnerability service.",
+        "Get container CVE exposure for this OpenShift cluster from the OCP Vulnerability service.",
       args: {
         severity: z
           .enum(["critical", "important", "moderate", "low"])
@@ -190,7 +190,7 @@ export function createUnconfiguredInsightsTools(): Record<
     },
     ocp_insights_cves: {
       description:
-        "Get CVE exposure for this cluster from Red Hat Insights.",
+        "Get container CVE exposure for this OpenShift cluster from the OCP Vulnerability service.",
       args: {
         severity: z
           .enum(["critical", "important", "moderate", "low"])
