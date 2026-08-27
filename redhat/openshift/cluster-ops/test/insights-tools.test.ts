@@ -87,6 +87,7 @@ describe("insights-tools", () => {
             data: [
               {
                 rule: {
+                  rule_id: "etcd_encryption|ETCD_ENCRYPT_001",
                   description: "etcd encryption is not enabled",
                   total_risk: 3,
                   category: { name: "Secrets stored unencrypted in etcd" },
@@ -100,6 +101,7 @@ describe("insights-tools", () => {
               },
               {
                 rule: {
+                  rule_id: "deprecated_api|DEPRECATED_API_002",
                   description: "Cluster has deprecated API resources",
                   total_risk: 4,
                   category: {
@@ -127,6 +129,9 @@ describe("insights-tools", () => {
       expect(result).toContain("Cluster has deprecated API resources")
       expect(result).toContain("[Important, Risk 3]")
       expect(result).toContain("etcd encryption is not enabled")
+      // Verify rule_id is present
+      expect(result).toContain("etcd_encryption|ETCD_ENCRYPT_001")
+      expect(result).toContain("deprecated_api|DEPRECATED_API_002")
       // Verify sorted: Critical before Important
       const criticalIdx = result.indexOf("Critical, Risk 4")
       const importantIdx = result.indexOf("Important, Risk 3")
@@ -158,6 +163,7 @@ describe("insights-tools", () => {
             data: [
               {
                 rule: {
+                  rule_id: "critical_finding|CRIT_001",
                   description: "Critical finding",
                   total_risk: 4,
                   resolution_set: [{ resolution: "Fix it" }],
@@ -174,6 +180,7 @@ describe("insights-tools", () => {
       )
       expect(result).toContain("Critical finding")
       expect(result).toContain("[Critical, Risk 4]")
+      expect(result).toContain("critical_finding|CRIT_001")
     })
 
     it("returns error message on API failure", async () => {

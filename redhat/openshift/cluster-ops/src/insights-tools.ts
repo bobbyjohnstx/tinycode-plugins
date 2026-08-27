@@ -4,6 +4,7 @@ import { z } from "zod"
 
 type InsightsReport = {
   rule: {
+    rule_id: string
     description: string
     total_risk: number
     resolution_set?: Array<{ resolution: string }>
@@ -68,6 +69,7 @@ function formatRecommendations(reports: InsightsReport[]): string {
       "No remediation available"
 
     lines.push(`- [${riskLevel}, Risk ${riskNum}] ${description}`)
+    lines.push(`  Rule: ${report.rule.rule_id}`)
     lines.push(`  Impact: ${category}`)
     lines.push(`  Resolution: ${resolution}`)
     lines.push("")
