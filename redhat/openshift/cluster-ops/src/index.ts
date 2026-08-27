@@ -32,7 +32,7 @@ export default {
       )
       const vulnerabilityClient = createConsoleApiClient(
         { offlineToken: opts.consoleOfflineToken },
-        "/api/vulnerability/v1",
+        "/api/ocp-vulnerability/v1",
       )
       insightsTools = createInsightsTools(
         insightsClient,
