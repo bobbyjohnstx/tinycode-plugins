@@ -1,6 +1,6 @@
 {
   "name": "tinycode-plugin-ocp-cluster-ops",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "license": "MIT",
   "description": "OpenShift cluster operations tools (get, logs, describe, apply)",
@@ -8,12 +8,17 @@
     "tinycode-plugin": ">=1"
   },
   "exports": {
-    ".": "./src/index.ts"
+    "./server": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "tinycode-plugin": "^1.18.0"
+  },
+  "peerDependenciesMeta": {
+    "tinycode-plugin": { "optional": true }
   },
   "dependencies": {
-    "tinycode-plugin": "^1.18.0",
-    "tinycode-plugin-redhat-shared": "workspace:*",
-    "zod": "^3.23.0"
+    "tinycode-plugin-redhat-shared": "^0.1.0",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "@types/bun": "^1.3.0",
