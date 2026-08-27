@@ -18,28 +18,22 @@ type InsightsRecommendationsResponse = {
   meta?: { count: number }
 }
 
-type InsightsCve = {
-  id: string
+type OcpCve = {
   synopsis: string
-  severity: number
-  public_date?: string
-  advisories_list?: string[]
-  description?: string
+  description: string
+  severity: string
+  cvss2_score: number
+  cvss3_score: number
+  publish_date: string
+  exploits: boolean
 }
 
-type InsightsCvesResponse = {
-  data: InsightsCve[]
-  meta?: { total_items: number }
+type OcpCvesResponse = {
+  data: OcpCve[]
+  meta?: { total_items?: number }
 }
 
 const RISK_LABELS: Record<number, string> = {
-  1: "Low",
-  2: "Moderate",
-  3: "Important",
-  4: "Critical",
-}
-
-const SEVERITY_LABELS: Record<number, string> = {
   1: "Low",
   2: "Moderate",
   3: "Important",
@@ -78,22 +72,31 @@ function formatRecommendations(reports: InsightsReport[]): string {
   return lines.join("\n").trimEnd()
 }
 
-function formatCves(cves: InsightsCve[]): string {
+function formatCves(cves: OcpCve[]): string {
+  const severityOrder: Record<string, number> = {
+    Critical: 0,
+    Important: 1,
+    Moderate: 2,
+    Low: 3,
+  }
+
   const sorted = [...cves].sort(
-    (a, b) => (b.severity ?? 0) - (a.severity ?? 0),
+    (a, b) => (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4),
   )
 
   const lines = [`CVE Exposure: ${sorted.length} CVEs`, ""]
   for (const cve of sorted) {
-    const severityLabel = SEVERITY_LABELS[cve.severity] ?? "Unknown"
-    const synopsis = cve.synopsis ?? cve.id
-    const published = cve.public_date
-      ? cve.public_date.substring(0, 10)
+    const cvss = cve.cvss3_score > 0 ? cve.cvss3_score : cve.cvss2_score
+    const exploit = cve.exploits ? " | Known Exploit" : ""
+    const published = cve.publish_date
+      ? cve.publish_date.substring(0, 10)
       : "Unknown"
-    const advisory = cve.advisories_list?.[0] ?? "None"
 
-    lines.push(`- ${cve.id} [${severityLabel}] -- ${synopsis}`)
-    lines.push(`  Published: ${published} | Advisory: ${advisory}`)
+    lines.push(`- ${cve.synopsis} [${cve.severity}] CVSS ${cvss}${exploit}`)
+    lines.push(`  Published: ${published}`)
+    if (cve.description) {
+      lines.push(`  ${cve.description}`)
+    }
     lines.push("")
   }
 
@@ -150,11 +153,11 @@ export function createInsightsTools(
         try {
           const params: Record<string, string> = {}
           if (args.severity) {
-            params["cvss_severity"] = args.severity
+            params["severity"] = args.severity
           }
           const response =
-            await vulnerabilityClient.get<InsightsCvesResponse>(
-              `/systems/${clusterId}/cves`,
+            await vulnerabilityClient.get<OcpCvesResponse>(
+              `/clusters/${clusterId}/cves`,
               params,
             )
           const cves = response.data.data ?? []

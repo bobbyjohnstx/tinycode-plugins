@@ -207,22 +207,26 @@ describe("insights-tools", () => {
       setupFetch([
         {
           method: "GET",
-          path: `/systems/${configuredOptions.clusterId}/cves`,
+          path: `/clusters/${configuredOptions.clusterId}/cves`,
           body: {
             data: [
               {
-                id: "CVE-2024-5678",
-                synopsis: "Another CVE description",
-                severity: 3,
-                public_date: "2024-02-20T00:00:00Z",
-                advisories_list: ["RHSA-2024:0042"],
+                synopsis: "CVE-2024-5678",
+                description: "Another CVE description",
+                severity: "Important",
+                cvss2_score: 0,
+                cvss3_score: 7.5,
+                publish_date: "2024-02-20",
+                exploits: false,
               },
               {
-                id: "CVE-2024-1234",
-                synopsis: "Description of the CVE",
-                severity: 4,
-                public_date: "2024-01-15T00:00:00Z",
-                advisories_list: ["RHSA-2024:0001"],
+                synopsis: "CVE-2024-1234",
+                description: "Description of the CVE",
+                severity: "Critical",
+                cvss2_score: 0,
+                cvss3_score: 9.8,
+                publish_date: "2024-01-15",
+                exploits: true,
               },
             ],
           },
@@ -234,10 +238,11 @@ describe("insights-tools", () => {
         {} as never,
       )) as string
       expect(result).toContain("CVE Exposure: 2 CVEs")
-      expect(result).toContain("CVE-2024-1234 [Critical]")
-      expect(result).toContain("CVE-2024-5678 [Important]")
+      expect(result).toContain("CVE-2024-1234 [Critical] CVSS 9.8")
+      expect(result).toContain("Known Exploit")
+      expect(result).toContain("CVE-2024-5678 [Important] CVSS 7.5")
       expect(result).toContain("Published: 2024-01-15")
-      expect(result).toContain("Advisory: RHSA-2024:0001")
+      expect(result).toContain("Description of the CVE")
       // Verify sorted: Critical before Important
       const criticalIdx = result.indexOf("CVE-2024-1234")
       const importantIdx = result.indexOf("CVE-2024-5678")
@@ -248,7 +253,7 @@ describe("insights-tools", () => {
       setupFetch([
         {
           method: "GET",
-          path: `/systems/${configuredOptions.clusterId}/cves`,
+          path: `/clusters/${configuredOptions.clusterId}/cves`,
           body: { data: [] },
         },
       ])
@@ -261,15 +266,17 @@ describe("insights-tools", () => {
       setupFetch([
         {
           method: "GET",
-          path: /systems\/.*\/cves.*cvss_severity=critical/,
+          path: /clusters\/.*\/cves.*severity=critical/,
           body: {
             data: [
               {
-                id: "CVE-2024-9999",
-                synopsis: "Critical vuln",
-                severity: 4,
-                public_date: "2024-03-01T00:00:00Z",
-                advisories_list: ["RHSA-2024:0099"],
+                synopsis: "CVE-2024-9999",
+                description: "Critical vuln",
+                severity: "Critical",
+                cvss2_score: 0,
+                cvss3_score: 9.1,
+                publish_date: "2024-03-01",
+                exploits: false,
               },
             ],
           },
@@ -282,13 +289,14 @@ describe("insights-tools", () => {
       )
       expect(result).toContain("CVE-2024-9999")
       expect(result).toContain("[Critical]")
+      expect(result).toContain("CVSS 9.1")
     })
 
     it("returns error message on API failure", async () => {
       setupFetch([
         {
           method: "GET",
-          path: `/systems/${configuredOptions.clusterId}/cves`,
+          path: `/clusters/${configuredOptions.clusterId}/cves`,
           status: 500,
           body: { error: "Server error" },
         },
