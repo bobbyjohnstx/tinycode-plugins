@@ -1,72 +1,165 @@
-import type { Hooks, PluginInput, PluginModule, ToolDefinition } from "tinycode-plugin"
+import type { Hooks, PluginModule, ToolDefinition } from "tinycode-plugin"
 import { z } from "zod"
-import { createLocalSearchIndex } from "tinycode-plugin-redhat-shared/local-search"
-import type { LocalSearchIndex, SearchResult } from "tinycode-plugin-redhat-shared/local-search"
 
-const optionsSchema = z
-  .object({
-    contentPath: z
-      .string()
-      .describe(
-        "Path to Red Hat developer content directory (e.g., ~/offline-repo/RH_developers/txt/)",
-      ),
-    learningPathsPath: z.string().optional().describe("Path to learning paths directory"),
+const BASE_URL = "https://developers.redhat.com"
+
+const TOPICS = [
+  "kubernetes", "containers", "kubernetes/operators",
+  "automation", "devops", "devsecops", "ansible-automation-applications-and-services", "ci-cd",
+  "enterprise-java", "python", "go", "rust", "nodejs", "dotnet",
+  "gitops", "developer-productivity", "developer-tools",
+  "observability", "microservices", "serverless", "event-driven", "api-management",
+  "security", "secure-coding",
+  "ai-ml", "data-science", "kafka-kubernetes",
+  "linux", "virtualization", "edge-computing", "databases",
+] as const
+
+async function fetchHtml(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: {
+      Accept: "text/html",
+      "User-Agent": "tinycode-plugin-dev-content/0.1.0",
+    },
   })
-  .optional()
-
-type ContentType = "article" | "cheatsheet" | "learning-path"
-
-const NOT_CONFIGURED_MSG =
-  "Developer content search not configured. Set contentPath in plugin options to the directory containing Red Hat developer content files."
-
-function inferContentType(filePath: string): ContentType {
-  const lower = filePath.toLowerCase()
-  if (lower.includes("cheatsheet")) return "cheatsheet"
-  if (lower.includes("learning")) return "learning-path"
-  return "article"
-}
-
-function formatResult(result: SearchResult): string {
-  const type = inferContentType(result.filePath)
-  const label = type.toUpperCase().replace("-", " ")
-  const snippet = result.snippet.replace(/\n/g, " ").slice(0, 120)
-  return `[${label}] ${result.title} | ${result.filePath} | ${snippet}`
-}
-
-function formatResults(results: SearchResult[]): string {
-  if (results.length === 0) {
-    return "No results found."
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${url}`)
   }
-  return results.map(formatResult).join("\n")
+  return res.text()
 }
 
-async function searchWithType(
-  index: LocalSearchIndex,
-  query: string,
-  type: ContentType | undefined,
-  limit: number,
-): Promise<string> {
-  const results = await index.search(query, limit)
-  const filtered = type ? results.filter((r) => inferContentType(r.filePath) === type) : results
-  return formatResults(filtered)
+function stripHtml(html: string): string {
+  return html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
-function createTools(index: LocalSearchIndex): Record<string, ToolDefinition> {
+interface ArticleLink {
+  title: string
+  url: string
+  date?: string
+  author?: string
+}
+
+function parseTopicPage(html: string): ArticleLink[] {
+  const articles: ArticleLink[] = []
+  const linkPattern = /<a[^>]*href="(\/articles\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
+  let match: RegExpExecArray | null
+
+  while ((match = linkPattern.exec(html)) !== null) {
+    const url = match[1]!
+    const title = stripHtml(match[2]!)
+    if (title.length > 10 && !articles.some((a) => a.url === url)) {
+      articles.push({ title, url: `${BASE_URL}${url}` })
+    }
+  }
+  return articles
+}
+
+function parseRssFeed(xml: string): ArticleLink[] {
+  const articles: ArticleLink[] = []
+  const itemPattern = /<item>([\s\S]*?)<\/item>/gi
+  let match: RegExpExecArray | null
+
+  while ((match = itemPattern.exec(xml)) !== null) {
+    const item = match[1]!
+    const title = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1]
+      ?? item.match(/<title>(.*?)<\/title>/)?.[1]
+      ?? "Untitled"
+    const link = item.match(/<link>(.*?)<\/link>/)?.[1] ?? ""
+    const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1]
+    const creator = item.match(/<dc:creator><!\[CDATA\[(.*?)\]\]><\/dc:creator>/)?.[1]
+      ?? item.match(/<dc:creator>(.*?)<\/dc:creator>/)?.[1]
+
+    if (link) {
+      articles.push({
+        title: stripHtml(title),
+        url: link,
+        date: pubDate ? new Date(pubDate).toISOString().split("T")[0] : undefined,
+        author: creator,
+      })
+    }
+  }
+  return articles
+}
+
+function extractArticleContent(html: string): string {
+  const bodyMatch = html.match(
+    /<div[^>]*class="[^"]*field--name-body[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/i,
+  )
+  if (bodyMatch) {
+    return stripHtml(bodyMatch[1]!)
+  }
+
+  const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+  if (mainMatch) {
+    return stripHtml(mainMatch[1]!)
+  }
+
+  const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
+  if (articleMatch) {
+    return stripHtml(articleMatch[1]!)
+  }
+
+  return stripHtml(html).slice(0, 5000)
+}
+
+function extractArticleMeta(html: string): { title: string; author?: string; date?: string } {
+  const title = html.match(/<title>(.*?)<\/title>/i)?.[1]
+    ?? html.match(/<h1[^>]*>(.*?)<\/h1>/i)?.[1]
+    ?? "Untitled"
+  const author = html.match(/<meta[^>]*name="author"[^>]*content="([^"]+)"/i)?.[1]
+  const date = html.match(/<meta[^>]*property="article:published_time"[^>]*content="([^"]+)"/i)?.[1]
+    ?? html.match(/<time[^>]*datetime="([^"]+)"/i)?.[1]
+
+  return {
+    title: stripHtml(title),
+    author,
+    date: date?.split("T")[0],
+  }
+}
+
+function formatArticleLink(a: ArticleLink): string {
+  const parts = [a.title, a.url]
+  if (a.date) parts.push(`Date: ${a.date}`)
+  if (a.author) parts.push(`Author: ${a.author}`)
+  return parts.join(" | ")
+}
+
+function createTools(): Record<string, ToolDefinition> {
   return {
     rh_dev_search: {
       description:
-        "Search indexed Red Hat developer articles by keyword. Returns title, file path, snippet, and content type (article/cheatsheet/learning-path).",
+        "Browse Red Hat developer articles by topic. Available topics include: kubernetes, containers, ai-ml, python, go, rust, nodejs, enterprise-java, security, devops, gitops, automation, microservices, and more.",
       args: {
-        query: z.string().describe("Search query keyword(s)"),
-        type: z
-          .enum(["article", "cheatsheet", "learning-path"])
-          .optional()
-          .describe("Filter by content type"),
-        limit: z.number().optional().describe("Max results to return (default 10)"),
+        topic: z.string().describe(
+          "Topic slug (e.g., kubernetes, ai-ml, python, containers, security, devops, gitops, enterprise-java)",
+        ),
+        page: z.number().optional().describe("Page number (default 1, 25 articles per page)"),
       },
-      async execute(args: { query: string; type?: ContentType; limit?: number }) {
+      async execute(args: { topic: string; page?: number }) {
         try {
-          return await searchWithType(index, args.query, args.type, args.limit ?? 10)
+          const topic = args.topic.toLowerCase()
+          if (!TOPICS.includes(topic as (typeof TOPICS)[number])) {
+            return `Unknown topic "${topic}". Available topics: ${TOPICS.join(", ")}`
+          }
+          const page = args.page ?? 1
+          const url = `${BASE_URL}/topics/${topic}/all?page=${page}`
+          const html = await fetchHtml(url)
+          const articles = parseTopicPage(html)
+
+          if (articles.length === 0) {
+            return `No articles found for topic "${topic}" on page ${page}.`
+          }
+          return `Articles on "${topic}" (page ${page}):\n` + articles.map(formatArticleLink).join("\n")
         } catch (error) {
           return `Search failed: ${error instanceof Error ? error.message : String(error)}`
         }
@@ -74,152 +167,56 @@ function createTools(index: LocalSearchIndex): Record<string, ToolDefinition> {
     },
 
     rh_dev_article: {
-      description: "Read full article content by file path from the developer content index.",
+      description:
+        "Read the full content of a Red Hat developer article by URL. Returns the article title, metadata, and body text.",
       args: {
-        path: z.string().describe("File path (relative to content directory) of the article"),
+        url: z.string().describe("Full URL of the article (e.g., https://developers.redhat.com/articles/2026/...)"),
       },
-      async execute(args: { path: string }) {
+      async execute(args: { url: string }) {
         try {
-          return await index.getContent(args.path)
+          const html = await fetchHtml(args.url)
+          const meta = extractArticleMeta(html)
+          const content = extractArticleContent(html)
+
+          const header = [`# ${meta.title}`]
+          if (meta.author) header.push(`Author: ${meta.author}`)
+          if (meta.date) header.push(`Date: ${meta.date}`)
+          header.push("")
+
+          const truncated = content.length > 8000 ? content.slice(0, 8000) + "\n\n[Content truncated]" : content
+          return header.join("\n") + truncated
         } catch (error) {
           return `Failed to read article: ${error instanceof Error ? error.message : String(error)}`
         }
       },
     },
 
-    rh_dev_cheatsheet: {
+    rh_dev_recent: {
       description:
-        "Search Red Hat developer cheatsheets by topic. Returns matching cheatsheet results.",
+        "Get the most recent Red Hat developer articles from the RSS feed. Returns titles, URLs, dates, and authors.",
       args: {
-        topic: z.string().describe("Cheatsheet topic to search for"),
+        limit: z.number().optional().describe("Number of articles to return (default 10, max 25)"),
       },
-      async execute(args: { topic: string }) {
+      async execute(args: { limit?: number }) {
         try {
-          return await searchWithType(index, args.topic, "cheatsheet", 10)
+          const xml = await fetchHtml(`${BASE_URL}/blog/feed/`)
+          const articles = parseRssFeed(xml)
+          const limited = articles.slice(0, Math.min(args.limit ?? 10, 25))
+
+          if (limited.length === 0) {
+            return "No recent articles found."
+          }
+          return `Recent Red Hat developer articles:\n` + limited.map(formatArticleLink).join("\n")
         } catch (error) {
-          return `Cheatsheet search failed: ${error instanceof Error ? error.message : String(error)}`
+          return `Failed to fetch recent articles: ${error instanceof Error ? error.message : String(error)}`
         }
       },
     },
-
-    rh_dev_learning_path: {
-      description:
-        "Search Red Hat developer learning paths by topic. Returns matching learning path results.",
-      args: {
-        topic: z.string().describe("Learning path topic to search for"),
-      },
-      async execute(args: { topic: string }) {
-        try {
-          return await searchWithType(index, args.topic, "learning-path", 10)
-        } catch (error) {
-          return `Learning path search failed: ${error instanceof Error ? error.message : String(error)}`
-        }
-      },
-    },
-  }
-}
-
-function createUnconfiguredTools(): Record<string, ToolDefinition> {
-  return {
-    rh_dev_search: {
-      description:
-        "Search indexed Red Hat developer articles by keyword. Returns title, file path, snippet, and content type.",
-      args: {
-        query: z.string().describe("Search query keyword(s)"),
-        type: z
-          .enum(["article", "cheatsheet", "learning-path"])
-          .optional()
-          .describe("Filter by content type"),
-        limit: z.number().optional().describe("Max results to return (default 10)"),
-      },
-      async execute(_args: { query: string; type?: ContentType; limit?: number }) {
-        return NOT_CONFIGURED_MSG
-      },
-    },
-
-    rh_dev_article: {
-      description: "Read full article content by file path from the developer content index.",
-      args: {
-        path: z.string().describe("File path (relative to content directory) of the article"),
-      },
-      async execute(_args: { path: string }) {
-        return NOT_CONFIGURED_MSG
-      },
-    },
-
-    rh_dev_cheatsheet: {
-      description: "Search Red Hat developer cheatsheets by topic.",
-      args: {
-        topic: z.string().describe("Cheatsheet topic to search for"),
-      },
-      async execute(_args: { topic: string }) {
-        return NOT_CONFIGURED_MSG
-      },
-    },
-
-    rh_dev_learning_path: {
-      description: "Search Red Hat developer learning paths by topic.",
-      args: {
-        topic: z.string().describe("Learning path topic to search for"),
-      },
-      async execute(_args: { topic: string }) {
-        return NOT_CONFIGURED_MSG
-      },
-    },
-  }
-}
-
-async function detectFramework($: PluginInput["$"]): Promise<string | null> {
-  try {
-    const result = await $`ls -1`.quiet().nothrow().text()
-    const files = result.split("\n")
-    if (files.includes("pom.xml") || files.includes("build.gradle")) return "java"
-    if (files.includes("package.json")) return "javascript"
-    if (files.includes("requirements.txt") || files.includes("pyproject.toml")) return "python"
-    if (files.includes("go.mod")) return "go"
-    if (files.includes("Cargo.toml")) return "rust"
-    if (files.includes("Containerfile") || files.includes("Dockerfile")) return "container"
-    return null
-  } catch {
-    return null
   }
 }
 
 export default {
-  schema: optionsSchema,
-  server: async (input, options): Promise<Hooks> => {
-    const result = optionsSchema.safeParse(options)
-    const parsed = result.success ? result.data : undefined
-
-    if (!parsed?.contentPath) {
-      return {
-        tool: createUnconfiguredTools(),
-      }
-    }
-
-    const index = createLocalSearchIndex({ basePath: parsed.contentPath })
-
-    let detectedFramework: string | null = null
-
-    return {
-      "session.start": async (_event: unknown, _output: unknown) => {
-        detectedFramework = await detectFramework(input.$)
-      },
-
-      "experimental.chat.system.transform": async (
-        _event: unknown,
-        output: { system: string[] },
-      ) => {
-        const lines = ["<rh-dev-content>"]
-        lines.push(`indexed-content: ${parsed.contentPath}`)
-        if (detectedFramework) {
-          lines.push(`detected-framework: ${detectedFramework}`)
-        }
-        lines.push("</rh-dev-content>")
-        output.system.push(lines.join("\n"))
-      },
-
-      tool: createTools(index),
-    }
-  },
+  server: async (): Promise<Hooks> => ({
+    tool: createTools(),
+  }),
 } satisfies PluginModule
