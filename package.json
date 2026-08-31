@@ -2,7 +2,7 @@
   "name": "tinycode-plugins",
   "private": true,
   "type": "module",
-  "workspaces": ["redhat/_shared", "redhat/*/*"],
+  "workspaces": ["redhat/_shared", "redhat/*/*", "general/*/*"],
   "scripts": {
     "test": "bun test --recursive",
     "typecheck": "bun run --filter='*' typecheck"
