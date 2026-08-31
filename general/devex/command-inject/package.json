@@ -1,5 +1,5 @@
 {
-  "name": "tinycode-plugin-command-inject",
+  "name": "tinycode-plugin-gen-command-inject",
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",

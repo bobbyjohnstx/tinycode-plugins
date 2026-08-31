@@ -33,7 +33,7 @@ afterEach(async () => {
   await rm(tmpDir, { recursive: true, force: true })
 })
 
-describe("tinycode-plugin-telemetry", () => {
+describe("tinycode-plugin-gen-telemetry", () => {
   it("session.start creates a session row in DB", async () => {
     const hooks = await loadPlugin()
 

@@ -1,5 +1,5 @@
 {
-  "name": "tinycode-plugin-code-review",
+  "name": "tinycode-plugin-gen-code-review",
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",

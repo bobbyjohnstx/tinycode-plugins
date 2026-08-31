@@ -30,7 +30,7 @@ async function getTools(): Promise<Record<string, ToolDefinition>> {
   return hooks.tool!
 }
 
-describe("tinycode-plugin-web-search", () => {
+describe("tinycode-plugin-gen-web-search", () => {
   describe("plugin loading", () => {
     it("exports both search tools", async () => {
       mockFetch.mockResolvedValue(new Response(MOCK_DDG_HTML))

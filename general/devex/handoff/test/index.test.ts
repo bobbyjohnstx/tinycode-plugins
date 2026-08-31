@@ -43,7 +43,7 @@ afterEach(async () => {
   await rm(handoffDir, { recursive: true, force: true })
 })
 
-describe("tinycode-plugin-handoff", () => {
+describe("tinycode-plugin-gen-handoff", () => {
   it("session.end writes state file to handoff directory", async () => {
     const hooks = await loadPlugin(handoffDir)
 

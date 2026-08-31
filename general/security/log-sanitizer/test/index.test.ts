@@ -14,7 +14,7 @@ function makeOutput(text: string) {
 
 const mockInput = { tool: "bash", sessionID: "s1", callID: "c1", args: {} }
 
-describe("tinycode-plugin-log-sanitizer", () => {
+describe("tinycode-plugin-gen-log-sanitizer", () => {
   describe("plugin loading", () => {
     it("loads without error", async () => {
       const input = createMockInput()

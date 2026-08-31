@@ -36,7 +36,7 @@ async function getHook() {
   return hooks["permission.ask"]!
 }
 
-describe("tinycode-plugin-safety-net", () => {
+describe("tinycode-plugin-gen-safety-net", () => {
   describe("plugin loading", () => {
     it("loads without error", async () => {
       const hook = await getHook()

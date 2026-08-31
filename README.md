@@ -13,13 +13,13 @@ Plus a shared utilities package (`redhat/_shared`) used by the Red Hat plugins.
 
 ```bash
 # Install a single plugin
-tinycode plugin add tinycode-plugin-safety-net
+tinycode plugin add tinycode-plugin-gen-safety-net
 
 # Install a Red Hat bundle for your role (see Suggested Bundles below)
 tinycode plugin add tinycode-plugin-ocp-oauth tinycode-plugin-ocp-context tinycode-plugin-ocp-cluster-ops
 
 # Install a general-purpose starter set
-tinycode plugin add tinycode-plugin-log-sanitizer tinycode-plugin-safety-net tinycode-plugin-web-search tinycode-plugin-notify
+tinycode plugin add tinycode-plugin-gen-log-sanitizer tinycode-plugin-gen-safety-net tinycode-plugin-gen-web-search tinycode-plugin-gen-notify
 ```
 
 All plugins that connect to OpenShift-hosted services require `tinycode-plugin-ocp-oauth` — it provides the `oc login` auth hook that every OCP-connected plugin depends on. Authenticate once, and every plugin reuses the token.
@@ -71,8 +71,8 @@ General-purpose plugins that work with any tinycode setup — no Red Hat infrast
 
 | Package | Description | Hooks |
 |---------|-------------|-------|
-| **tinycode-plugin-log-sanitizer** | Redacts secrets and sensitive data from tool outputs before they reach the LLM context. | `tool.execute.after` |
-| **tinycode-plugin-safety-net** | Blocks dangerous shell commands — `rm -rf /`, `git push --force main`, `kubectl delete namespace` — before execution. | `permission.ask` |
+| **tinycode-plugin-gen-log-sanitizer** | Redacts secrets and sensitive data from tool outputs before they reach the LLM context. | `tool.execute.after` |
+| **tinycode-plugin-gen-safety-net** | Blocks dangerous shell commands — `rm -rf /`, `git push --force main`, `kubectl delete namespace` — before execution. | `permission.ask` |
 
 #### Log Sanitizer
 
@@ -103,13 +103,13 @@ Sets `output.status = "deny"` to block matching commands. Scoped paths like `./b
 
 | Package | Description | Hooks |
 |---------|-------------|-------|
-| **tinycode-plugin-context-pruning** | Prunes stale and duplicate tool outputs from conversation context to optimize token usage. | `experimental.chat.messages.transform` |
-| **tinycode-plugin-handoff** | Cross-session context handoff — saves goals, decisions, open tasks, and modified files for the next session. | `session.start`, `session.end`, `system.transform`, `tool` (1) |
-| **tinycode-plugin-notify** | Desktop and push notifications when long-running tasks complete. | `tool` (1) |
-| **tinycode-plugin-command-inject** | Auto-discovers executable scripts in a directory and registers each as a callable tool. | `tool` (dynamic) |
-| **tinycode-plugin-snippets** | YAML template library for Kubernetes/OpenShift resources with variable substitution. | `tool` (2) |
-| **tinycode-plugin-code-review** | Git diff viewer formatted for AI-assisted code review. | `tool` (2) |
-| **tinycode-plugin-telemetry** | Tool call telemetry with local SQLite persistence and reporting. | `session.start`, `session.end`, `tool.execute.after`, `tool` (2) |
+| **tinycode-plugin-gen-context-pruning** | Prunes stale and duplicate tool outputs from conversation context to optimize token usage. | `experimental.chat.messages.transform` |
+| **tinycode-plugin-gen-handoff** | Cross-session context handoff — saves goals, decisions, open tasks, and modified files for the next session. | `session.start`, `session.end`, `system.transform`, `tool` (1) |
+| **tinycode-plugin-gen-notify** | Desktop and push notifications when long-running tasks complete. | `tool` (1) |
+| **tinycode-plugin-gen-command-inject** | Auto-discovers executable scripts in a directory and registers each as a callable tool. | `tool` (dynamic) |
+| **tinycode-plugin-gen-snippets** | YAML template library for Kubernetes/OpenShift resources with variable substitution. | `tool` (2) |
+| **tinycode-plugin-gen-code-review** | Git diff viewer formatted for AI-assisted code review. | `tool` (2) |
+| **tinycode-plugin-gen-telemetry** | Tool call telemetry with local SQLite persistence and reporting. | `session.start`, `session.end`, `tool.execute.after`, `tool` (2) |
 
 #### Context Pruning
 
@@ -201,7 +201,7 @@ Passive tool-call tracking to local SQLite (`bun:sqlite` with WAL mode):
 
 | Package | Description | Hooks |
 |---------|-------------|-------|
-| **tinycode-plugin-web-search** | Web search via DuckDuckGo with Red Hat knowledge base integration. No API key required. | `tool` (2) |
+| **tinycode-plugin-gen-web-search** | Web search via DuckDuckGo with Red Hat knowledge base integration. No API key required. | `tool` (2) |
 
 #### Web Search
 
@@ -217,7 +217,7 @@ Addresses the biggest limitation of local LLMs: stale or missing knowledge. Fetc
 
 | Package | Description | Hooks |
 |---------|-------------|-------|
-| **tinycode-plugin-pilot** | Gitea issue management — list, create, update, and comment on issues from the coding session. | `tool` (4) |
+| **tinycode-plugin-gen-pilot** | Gitea issue management — list, create, update, and comment on issues from the coding session. | `tool` (4) |
 
 #### Pilot
 
@@ -475,10 +475,10 @@ Safety, search, and notifications — useful regardless of role.
 
 ```bash
 tinycode plugin add \
-  tinycode-plugin-log-sanitizer \     # redact secrets from tool outputs
-  tinycode-plugin-safety-net \        # block destructive commands
-  tinycode-plugin-web-search \        # look things up without leaving the session
-  tinycode-plugin-notify              # get pinged when tasks finish
+  tinycode-plugin-gen-log-sanitizer \     # redact secrets from tool outputs
+  tinycode-plugin-gen-safety-net \        # block destructive commands
+  tinycode-plugin-gen-web-search \        # look things up without leaving the session
+  tinycode-plugin-gen-notify              # get pinged when tasks finish
 ```
 
 ### Local LLM Optimization
@@ -487,9 +487,9 @@ For users running local models with limited context windows.
 
 ```bash
 tinycode plugin add \
-  tinycode-plugin-context-pruning \   # core — prune stale tool outputs
-  tinycode-plugin-handoff \           # core — session continuity across context limits
-  tinycode-plugin-telemetry           # track tool usage and compare models
+  tinycode-plugin-gen-context-pruning \   # core — prune stale tool outputs
+  tinycode-plugin-gen-handoff \           # core — session continuity across context limits
+  tinycode-plugin-gen-telemetry           # track tool usage and compare models
 ```
 
 ### Power User DevEx
@@ -498,10 +498,10 @@ Scripting, templates, and code review for daily development.
 
 ```bash
 tinycode plugin add \
-  tinycode-plugin-code-review \       # structured diffs for AI review
-  tinycode-plugin-command-inject \    # expose project scripts as tools
-  tinycode-plugin-snippets \          # K8s/OCP YAML templates
-  tinycode-plugin-pilot               # Gitea issue management
+  tinycode-plugin-gen-code-review \       # structured diffs for AI review
+  tinycode-plugin-gen-command-inject \    # expose project scripts as tools
+  tinycode-plugin-gen-snippets \          # K8s/OCP YAML templates
+  tinycode-plugin-gen-pilot               # Gitea issue management
 ```
 
 ### OpenShift Administrator
@@ -547,7 +547,7 @@ tinycode plugin add \
   tinycode-plugin-quay \             # inspect images and scan results
   tinycode-plugin-rhdh \             # look up services, APIs, and docs
   tinycode-plugin-lightwell \        # check dependencies for patches
-  tinycode-plugin-code-review        # structured diffs for code review
+  tinycode-plugin-gen-code-review        # structured diffs for code review
 ```
 
 ### Security / Governance & Compliance
@@ -557,8 +557,8 @@ Audit-focused — image scanning, policy enforcement, supply chain verification,
 ```bash
 tinycode plugin add \
   tinycode-plugin-ocp-oauth \
-  tinycode-plugin-log-sanitizer \    # prevent secret leakage
-  tinycode-plugin-safety-net \       # block destructive commands
+  tinycode-plugin-gen-log-sanitizer \    # prevent secret leakage
+  tinycode-plugin-gen-safety-net \       # block destructive commands
   tinycode-plugin-rhacs \            # core — image and deployment policy checks
   tinycode-plugin-lightwell \        # core — supply chain patch verification
   tinycode-plugin-container-linter \ # Containerfile best practices and UBI checks
@@ -615,7 +615,7 @@ tinycode plugin add \
   tinycode-plugin-ecosystem-catalog \  # certified container images and operators
   tinycode-plugin-rh-api-catalog \     # console.redhat.com API specs
   tinycode-plugin-rhdp-provisioner \   # provision demo environments
-  tinycode-plugin-web-search           # general web search for everything else
+  tinycode-plugin-gen-web-search           # general web search for everything else
 ```
 
 ### Incident Response / On-Call
@@ -630,7 +630,7 @@ tinycode plugin add \
   tinycode-plugin-obs-metrics \      # PromQL queries and alert silencing
   tinycode-plugin-obs-logging \      # Loki logs and Tempo traces
   tinycode-plugin-rhacs \            # active violations and risk scores
-  tinycode-plugin-notify             # get alerted when long queries finish
+  tinycode-plugin-gen-notify             # get alerted when long queries finish
 ```
 
 ### Developer Onboarding
@@ -644,7 +644,7 @@ tinycode plugin add \
   tinycode-plugin-rh-api-catalog \     # console.redhat.com API specs
   tinycode-plugin-rhdp-provisioner \   # provision demo environments
   tinycode-plugin-ecosystem-catalog \  # certified partners and operators
-  tinycode-plugin-web-search           # look up anything else
+  tinycode-plugin-gen-web-search           # look up anything else
 ```
 
 ---
@@ -687,20 +687,20 @@ cd redhat/openshift/cluster-ops && bun test
 ```
 general/
   security/
-    log-sanitizer/                # tinycode-plugin-log-sanitizer
-    safety-net/                   # tinycode-plugin-safety-net
+    log-sanitizer/                # tinycode-plugin-gen-log-sanitizer
+    safety-net/                   # tinycode-plugin-gen-safety-net
   devex/
-    context-pruning/              # tinycode-plugin-context-pruning
-    handoff/                      # tinycode-plugin-handoff
-    notify/                       # tinycode-plugin-notify
-    command-inject/               # tinycode-plugin-command-inject
-    snippets/                     # tinycode-plugin-snippets
-    code-review/                  # tinycode-plugin-code-review
-    telemetry/                    # tinycode-plugin-telemetry
+    context-pruning/              # tinycode-plugin-gen-context-pruning
+    handoff/                      # tinycode-plugin-gen-handoff
+    notify/                       # tinycode-plugin-gen-notify
+    command-inject/               # tinycode-plugin-gen-command-inject
+    snippets/                     # tinycode-plugin-gen-snippets
+    code-review/                  # tinycode-plugin-gen-code-review
+    telemetry/                    # tinycode-plugin-gen-telemetry
   reference/
-    web-search/                   # tinycode-plugin-web-search
+    web-search/                   # tinycode-plugin-gen-web-search
   automation/
-    pilot/                        # tinycode-plugin-pilot
+    pilot/                        # tinycode-plugin-gen-pilot
 
 redhat/
   _shared/                        # Shared utilities (oc client, API client, auth, test utils)

@@ -1,5 +1,5 @@
 {
-  "name": "tinycode-plugin-handoff",
+  "name": "tinycode-plugin-gen-handoff",
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",

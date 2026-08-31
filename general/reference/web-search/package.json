@@ -1,5 +1,5 @@
 {
-  "name": "tinycode-plugin-web-search",
+  "name": "tinycode-plugin-gen-web-search",
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",

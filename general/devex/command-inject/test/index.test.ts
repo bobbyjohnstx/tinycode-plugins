@@ -45,7 +45,7 @@ async function getTools() {
   return hooks.tool ?? {}
 }
 
-describe("tinycode-plugin-command-inject", () => {
+describe("tinycode-plugin-gen-command-inject", () => {
   describe("discovery", () => {
     it("registers zero tools when COMMAND_INJECT_DIR is not set", async () => {
       delete process.env.COMMAND_INJECT_DIR

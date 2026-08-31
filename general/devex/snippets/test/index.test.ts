@@ -24,7 +24,7 @@ async function getTools(): Promise<Record<string, ToolDefinition>> {
   return hooks.tool!
 }
 
-describe("tinycode-plugin-snippets", () => {
+describe("tinycode-plugin-gen-snippets", () => {
   describe("plugin loading", () => {
     it("registers snippet_list and snippet_expand tools", async () => {
       process.env.SNIPPETS_DIR = "/nonexistent-dir-for-test"
