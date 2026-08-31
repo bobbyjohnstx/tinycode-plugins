@@ -26,7 +26,7 @@ function mockResponse(body: unknown, status = 200, statusText = "OK") {
   })
 }
 
-describe("tinycode-plugin-rh-pilot", () => {
+describe("tinycode-plugin-pilot", () => {
   let fetchSpy: ReturnType<typeof spyOn<typeof globalThis, "fetch">>
   const savedToken = process.env.GITEA_TOKEN
   const savedUrl = process.env.GITEA_URL

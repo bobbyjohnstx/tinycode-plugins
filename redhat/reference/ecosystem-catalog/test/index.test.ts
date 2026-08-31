@@ -1,194 +1,227 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test"
-import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises"
-import { join } from "node:path"
-import { tmpdir } from "node:os"
-import { createMockInput } from "tinycode-plugin-redhat-shared/test-utils"
+import { describe, it, expect, afterEach } from "bun:test"
 import plugin from "../src/index"
 
-let tempDir: string
+const originalFetch = globalThis.fetch
 
-beforeAll(async () => {
-  tempDir = await mkdtemp(join(tmpdir(), "ecosystem-catalog-test-"))
-  await mkdir(join(tempDir, "partners"), { recursive: true })
-  await mkdir(join(tempDir, "hardware"), { recursive: true })
-
-  await writeFile(
-    join(tempDir, "partners", "netapp-storage.txt"),
-    "NetApp Trident Storage\nCategory: storage\nPlatform: OCP\nOperator: trident-csi\nCertified: Yes\nSupported OCP: 4.12, 4.13, 4.14\nInstall: OperatorHub",
-  )
-  await writeFile(
-    join(tempDir, "partners", "nvidia-ai.txt"),
-    "NVIDIA GPU Operator\nCategory: AI-ML\nPlatform: OCP\nOperator: gpu-operator\nCertified: Yes",
-  )
-  await writeFile(
-    join(tempDir, "hardware", "dell-server.txt"),
-    "Dell PowerEdge R750\nCategory: certified hardware\nPlatform: RHEL\nVendor: Dell\nModel: R750\nCertified RHEL: 8.8, 9.2",
-  )
-  await writeFile(
-    join(tempDir, "partners", "palo-alto-security.txt"),
-    "Palo Alto Networks Prisma Cloud\nCategory: security\nPlatform: OCP, RHEL",
-  )
+afterEach(() => {
+  globalThis.fetch = originalFetch
 })
 
-afterAll(async () => {
-  if (tempDir) {
-    await rm(tempDir, { recursive: true, force: true })
-  }
-})
-
-async function getTools(options?: Record<string, unknown>) {
-  const input = createMockInput()
-  const hooks = await plugin.server(input, options)
-  return hooks.tool!
+function mockPyxisResponse(data: unknown) {
+  globalThis.fetch = (() => {
+    return Promise.resolve(
+      new Response(JSON.stringify(data), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    )
+  }) as typeof fetch
 }
 
-async function getConfiguredTools() {
-  return getTools({ catalogPath: tempDir })
+function mockPyxisError(status = 500) {
+  globalThis.fetch = (() => {
+    return Promise.resolve(
+      new Response("Internal Server Error", {
+        status,
+        headers: { "content-type": "text/plain" },
+      }),
+    )
+  }) as typeof fetch
+}
+
+async function getTools() {
+  const hooks = await plugin.server()
+  return hooks.tool!
 }
 
 describe("tinycode-plugin-ecosystem-catalog", () => {
   describe("plugin loading", () => {
-    it("loads without error", async () => {
-      const tools = await getTools(undefined)
-      expect(tools).toBeDefined()
+    it("exports server function", () => {
+      expect(plugin.server).toBeFunction()
     })
 
     it("registers all three tools", async () => {
-      const tools = await getConfiguredTools()
+      const tools = await getTools()
       expect(tools.ecosystem_search).toBeDefined()
       expect(tools.ecosystem_operator).toBeDefined()
-      expect(tools.ecosystem_hardware).toBeDefined()
+      expect(tools.ecosystem_browse).toBeDefined()
     })
 
     it("all tools have descriptions", async () => {
-      const tools = await getConfiguredTools()
+      const tools = await getTools()
       expect(tools.ecosystem_search.description).toBeTruthy()
       expect(tools.ecosystem_operator.description).toBeTruthy()
-      expect(tools.ecosystem_hardware.description).toBeTruthy()
-    })
-  })
-
-  describe("unconfigured tools", () => {
-    it("ecosystem_search returns unconfigured message", async () => {
-      const tools = await getTools(undefined)
-      const result = await tools.ecosystem_search.execute(
-        { query: "netapp" },
-        {} as never,
-      )
-      expect(result).toContain("not configured")
-    })
-
-    it("ecosystem_operator returns unconfigured message", async () => {
-      const tools = await getTools(undefined)
-      const result = await tools.ecosystem_operator.execute(
-        { operatorName: "trident" },
-        {} as never,
-      )
-      expect(result).toContain("not configured")
-    })
-
-    it("ecosystem_hardware returns unconfigured message", async () => {
-      const tools = await getTools(undefined)
-      const result = await tools.ecosystem_hardware.execute(
-        { query: "dell" },
-        {} as never,
-      )
-      expect(result).toContain("not configured")
+      expect(tools.ecosystem_browse.description).toBeTruthy()
     })
   })
 
   describe("ecosystem_search", () => {
-    it("searches catalog by keyword", async () => {
-      const tools = await getConfiguredTools()
+    it("returns container image results", async () => {
+      mockPyxisResponse({
+        data: [
+          {
+            repository: "ubi9",
+            registry: "registry.access.redhat.com",
+            display_data: {
+              name: "Red Hat Universal Base Image 9",
+              short_description: "UBI 9 base image",
+            },
+            application_categories: ["base-image"],
+            last_update_date: "2026-01-15T00:00:00Z",
+          },
+        ],
+        page: 0,
+        page_size: 10,
+        total: 1,
+      })
+      const tools = await getTools()
       const result = (await tools.ecosystem_search.execute(
-        { query: "NetApp" },
+        { repository: "ubi9" },
         {} as never,
       )) as string
-      expect(result).toContain("NetApp Trident Storage")
+      expect(result).toContain("ubi9")
+      expect(result).toContain("Red Hat Universal Base Image 9")
+      expect(result).toContain("base-image")
     })
 
-    it("filters by category", async () => {
-      const tools = await getConfiguredTools()
+    it("returns no results for unknown repository", async () => {
+      mockPyxisResponse({ data: [], page: 0, page_size: 10, total: 0 })
+      const tools = await getTools()
       const result = (await tools.ecosystem_search.execute(
-        { query: "NetApp", category: "storage" },
+        { repository: "nonexistent-xyz" },
         {} as never,
       )) as string
-      expect(result).toContain("storage")
-      expect(result).toContain("NetApp")
+      expect(result).toContain("No container image found")
     })
 
-    it("filters by platform", async () => {
-      const tools = await getConfiguredTools()
+    it("handles API errors gracefully", async () => {
+      mockPyxisError()
+      const tools = await getTools()
       const result = (await tools.ecosystem_search.execute(
-        { query: "NetApp", platform: "OCP" },
+        { repository: "ubi9" },
         {} as never,
       )) as string
-      expect(result).toContain("NetApp")
-      expect(result).toContain("OCP")
-    })
-
-    it("returns empty for no matches", async () => {
-      const tools = await getConfiguredTools()
-      const result = (await tools.ecosystem_search.execute(
-        { query: "nonexistent-xyz" },
-        {} as never,
-      )) as string
-      expect(result).toContain("No results found")
-    })
-
-    it("returns error on failure", async () => {
-      const input = createMockInput()
-      const hooks = await plugin.server(input, { catalogPath: "/nonexistent/path/xyz" })
-      const tools = hooks.tool!
-      const result = (await tools.ecosystem_search.execute(
-        { query: "test" },
-        {} as never,
-      )) as string
-      expect(result).toContain("No results found")
+      expect(result).toContain("Search failed")
     })
   })
 
   describe("ecosystem_operator", () => {
-    it("gets operator details", async () => {
-      const tools = await getConfiguredTools()
+    it("returns operator details", async () => {
+      mockPyxisResponse({
+        data: [
+          {
+            csv_display_name: "AMQ Streams",
+            package: "amq-streams",
+            version: "2.6.0",
+            ocp_version: "v4.12-v4.14",
+            organization: "Red Hat",
+            channel_name: "stable",
+          },
+        ],
+        page: 0,
+        page_size: 5,
+        total: 1,
+      })
+      const tools = await getTools()
       const result = (await tools.ecosystem_operator.execute(
-        { operatorName: "trident-csi" },
+        { package: "amq-streams" },
         {} as never,
       )) as string
-      expect(result).toContain("trident-csi")
-      expect(result).toContain("4.12")
-      expect(result).toContain("OperatorHub")
-      expect(result).toContain("certified")
+      expect(result).toContain("AMQ Streams")
+      expect(result).toContain("amq-streams")
+      expect(result).toContain("v4.12-v4.14")
+      expect(result).toContain("Red Hat")
     })
 
     it("returns not found for unknown operator", async () => {
-      const tools = await getConfiguredTools()
+      mockPyxisResponse({ data: [], page: 0, page_size: 5, total: 0 })
+      const tools = await getTools()
       const result = (await tools.ecosystem_operator.execute(
-        { operatorName: "nonexistent-operator" },
+        { package: "nonexistent" },
         {} as never,
       )) as string
       expect(result).toContain("No operator found")
     })
+
+    it("handles API errors gracefully", async () => {
+      mockPyxisError()
+      const tools = await getTools()
+      const result = (await tools.ecosystem_operator.execute(
+        { package: "amq-streams" },
+        {} as never,
+      )) as string
+      expect(result).toContain("Operator lookup failed")
+    })
   })
 
-  describe("ecosystem_hardware", () => {
-    it("searches hardware", async () => {
-      const tools = await getConfiguredTools()
-      const result = (await tools.ecosystem_hardware.execute(
-        { query: "Dell" },
+  describe("ecosystem_browse", () => {
+    it("browses container images", async () => {
+      mockPyxisResponse({
+        data: [
+          {
+            repository: "nodejs-18",
+            registry: "registry.access.redhat.com",
+            display_data: { name: "Node.js 18" },
+            last_update_date: "2026-01-10T00:00:00Z",
+          },
+        ],
+        page: 0,
+        page_size: 10,
+        total: 100,
+      })
+      const tools = await getTools()
+      const result = (await tools.ecosystem_browse.execute(
+        { type: "containers" },
         {} as never,
       )) as string
-      expect(result).toContain("Dell")
-      expect(result).toContain("R750")
+      expect(result).toContain("certified container images")
+      expect(result).toContain("nodejs-18")
+      expect(result).toContain("Node.js 18")
     })
 
-    it("returns empty for no hardware matches", async () => {
-      const tools = await getConfiguredTools()
-      const result = (await tools.ecosystem_hardware.execute(
-        { query: "nonexistent-hardware-xyz" },
+    it("browses operator bundles", async () => {
+      mockPyxisResponse({
+        data: [
+          {
+            csv_display_name: "Grafana Operator",
+            package: "grafana-operator",
+            version: "5.0.0",
+            ocp_version: "v4.12",
+            organization: "Community",
+            channel_name: "v5",
+          },
+        ],
+        page: 0,
+        page_size: 10,
+        total: 50,
+      })
+      const tools = await getTools()
+      const result = (await tools.ecosystem_browse.execute(
+        { type: "operators" },
         {} as never,
       )) as string
-      expect(result).toContain("No hardware results found")
+      expect(result).toContain("operator bundles")
+      expect(result).toContain("Grafana Operator")
+    })
+
+    it("returns no results when empty", async () => {
+      mockPyxisResponse({ data: [], page: 0, page_size: 10, total: 0 })
+      const tools = await getTools()
+      const result = (await tools.ecosystem_browse.execute(
+        { type: "containers" },
+        {} as never,
+      )) as string
+      expect(result).toBe("No results.")
+    })
+
+    it("handles API errors gracefully", async () => {
+      mockPyxisError()
+      const tools = await getTools()
+      const result = (await tools.ecosystem_browse.execute(
+        { type: "containers" },
+        {} as never,
+      )) as string
+      expect(result).toContain("Browse failed")
     })
   })
 })

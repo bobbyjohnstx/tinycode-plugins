@@ -1,260 +1,185 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test"
-import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises"
-import { join } from "node:path"
-import { tmpdir } from "node:os"
-import { createMockInput, createMockShell } from "tinycode-plugin-redhat-shared/test-utils"
+import { describe, it, expect, afterEach } from "bun:test"
 import plugin from "../src/index"
 
-let tempDir: string
+const originalFetch = globalThis.fetch
 
-beforeAll(async () => {
-  tempDir = await mkdtemp(join(tmpdir(), "rh-dev-content-test-"))
-  await mkdir(join(tempDir, "articles"), { recursive: true })
-  await mkdir(join(tempDir, "cheatsheets"), { recursive: true })
-  await mkdir(join(tempDir, "learning-paths"), { recursive: true })
-  await writeFile(
-    join(tempDir, "articles", "quarkus-guide.txt"),
-    "Quarkus Getting Started\nBuild your first Quarkus app with this guide.",
-  )
-  await writeFile(
-    join(tempDir, "cheatsheets", "podman-cheatsheet.txt"),
-    "Podman Cheatsheet\nCommon podman commands for container management.",
-  )
-  await writeFile(
-    join(tempDir, "learning-paths", "kubernetes-basics.txt"),
-    "Kubernetes Learning Path\nModule 1: Pods and Deployments.",
-  )
+afterEach(() => {
+  globalThis.fetch = originalFetch
 })
 
-afterAll(async () => {
-  if (tempDir) {
-    await rm(tempDir, { recursive: true, force: true })
-  }
-})
-
-async function getTools(options?: Record<string, unknown>) {
-  const input = createMockInput()
-  const hooks = await plugin.server(input, options)
-  return hooks.tool!
+function mockFetchResponse(handler: (url: string) => { ok: boolean; text: string }) {
+  globalThis.fetch = ((input: string | URL | Request) => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
+    const result = handler(url)
+    return Promise.resolve(
+      new Response(result.text, {
+        status: result.ok ? 200 : 404,
+        headers: { "content-type": "text/html" },
+      }),
+    )
+  }) as typeof fetch
 }
 
-async function getConfiguredTools() {
-  return getTools({ contentPath: tempDir })
+async function getTools() {
+  const hooks = await plugin.server()
+  return hooks.tool!
 }
 
 describe("tinycode-plugin-rh-dev-content", () => {
   describe("plugin loading", () => {
-    it("loads without error when no options provided", async () => {
-      const tools = await getTools(undefined)
+    it("exports server function", () => {
+      expect(plugin.server).toBeFunction()
+    })
+
+    it("returns all three tools", async () => {
+      const tools = await getTools()
       expect(tools).toBeDefined()
       expect(tools.rh_dev_search).toBeDefined()
       expect(tools.rh_dev_article).toBeDefined()
-      expect(tools.rh_dev_cheatsheet).toBeDefined()
-      expect(tools.rh_dev_learning_path).toBeDefined()
-    })
-
-    it("loads with valid options and returns configured tools", async () => {
-      const tools = await getConfiguredTools()
-      expect(tools).toBeDefined()
-      expect(tools.rh_dev_search).toBeDefined()
+      expect(tools.rh_dev_recent).toBeDefined()
     })
   })
 
   describe("tool descriptions", () => {
     it("all tools have descriptions", async () => {
-      const tools = await getConfiguredTools()
+      const tools = await getTools()
       expect(tools.rh_dev_search.description).toBeTruthy()
       expect(tools.rh_dev_article.description).toBeTruthy()
-      expect(tools.rh_dev_cheatsheet.description).toBeTruthy()
-      expect(tools.rh_dev_learning_path.description).toBeTruthy()
-    })
-  })
-
-  describe("unconfigured tools", () => {
-    it("rh_dev_search returns not-configured message", async () => {
-      const tools = await getTools(undefined)
-      const result = await tools.rh_dev_search.execute({ query: "quarkus" }, {} as never)
-      expect(result).toContain("not configured")
-    })
-
-    it("rh_dev_article returns not-configured message", async () => {
-      const tools = await getTools(undefined)
-      const result = await tools.rh_dev_article.execute({ path: "test.txt" }, {} as never)
-      expect(result).toContain("not configured")
-    })
-
-    it("rh_dev_cheatsheet returns not-configured message", async () => {
-      const tools = await getTools(undefined)
-      const result = await tools.rh_dev_cheatsheet.execute({ topic: "podman" }, {} as never)
-      expect(result).toContain("not configured")
-    })
-
-    it("rh_dev_learning_path returns not-configured message", async () => {
-      const tools = await getTools(undefined)
-      const result = await tools.rh_dev_learning_path.execute(
-        { topic: "kubernetes" },
-        {} as never,
-      )
-      expect(result).toContain("not configured")
+      expect(tools.rh_dev_recent.description).toBeTruthy()
     })
   })
 
   describe("rh_dev_search", () => {
-    it("returns results matching query", async () => {
-      const tools = await getConfiguredTools()
+    it("returns articles for valid topic", async () => {
+      mockFetchResponse(() => ({
+        ok: true,
+        text: `<html><body>
+          <a href="/articles/2026/quarkus-guide">Quarkus Getting Started Guide for Developers</a>
+          <a href="/articles/2026/quarkus-reactive">Building Reactive Apps with Quarkus Framework</a>
+        </body></html>`,
+      }))
+      const tools = await getTools()
       const result = (await tools.rh_dev_search.execute(
-        { query: "quarkus" },
+        { topic: "kubernetes" },
         {} as never,
       )) as string
-      expect(result).toContain("Quarkus Getting Started")
-      expect(result).toContain("[ARTICLE]")
+      expect(result).toContain('Articles on "kubernetes"')
+      expect(result).toContain("Quarkus Getting Started Guide for Developers")
     })
 
-    it("returns no results for unmatched query", async () => {
-      const tools = await getConfiguredTools()
+    it("rejects unknown topics", async () => {
+      const tools = await getTools()
       const result = (await tools.rh_dev_search.execute(
-        { query: "nonexistent" },
+        { topic: "nonexistent" },
         {} as never,
       )) as string
-      expect(result).toContain("No results found")
+      expect(result).toContain("Unknown topic")
+      expect(result).toContain("Available topics")
     })
 
-    it("filters by type when specified", async () => {
-      const tools = await getConfiguredTools()
+    it("returns no articles when page has no matching links", async () => {
+      mockFetchResponse(() => ({
+        ok: true,
+        text: "<html><body>No content here</body></html>",
+      }))
+      const tools = await getTools()
       const result = (await tools.rh_dev_search.execute(
-        { query: "podman", type: "cheatsheet" },
+        { topic: "kubernetes" },
         {} as never,
       )) as string
-      expect(result).toContain("[CHEATSHEET]")
-      expect(result).not.toContain("[ARTICLE]")
+      expect(result).toContain("No articles found")
     })
 
-    it("excludes non-matching types", async () => {
-      const tools = await getConfiguredTools()
+    it("handles fetch errors gracefully", async () => {
+      mockFetchResponse(() => ({ ok: false, text: "Server Error" }))
+      const tools = await getTools()
       const result = (await tools.rh_dev_search.execute(
-        { query: "quarkus", type: "cheatsheet" },
+        { topic: "kubernetes" },
         {} as never,
       )) as string
-      expect(result).toContain("No results found")
+      expect(result).toContain("Search failed")
     })
   })
 
   describe("rh_dev_article", () => {
-    it("returns full content for valid path", async () => {
-      const tools = await getConfiguredTools()
+    it("returns article content and metadata", async () => {
+      mockFetchResponse(() => ({
+        ok: true,
+        text: `<html>
+          <head><title>Quarkus Guide</title><meta name="author" content="Jane Doe"></head>
+          <body><article><h1>Quarkus Guide</h1><p>Build your first app.</p></article></body>
+        </html>`,
+      }))
+      const tools = await getTools()
       const result = (await tools.rh_dev_article.execute(
-        { path: "articles/quarkus-guide.txt" },
+        { url: "https://developers.redhat.com/articles/2026/quarkus-guide" },
         {} as never,
       )) as string
-      expect(result).toContain("Quarkus Getting Started")
-      expect(result).toContain("Build your first Quarkus app")
+      expect(result).toContain("Quarkus Guide")
+      expect(result).toContain("Build your first app")
+      expect(result).toContain("Jane Doe")
     })
 
-    it("returns error for invalid path", async () => {
-      const tools = await getConfiguredTools()
+    it("returns error for failed fetch", async () => {
+      mockFetchResponse(() => ({ ok: false, text: "Not Found" }))
+      const tools = await getTools()
       const result = (await tools.rh_dev_article.execute(
-        { path: "nonexistent/file.txt" },
+        { url: "https://developers.redhat.com/articles/nonexistent" },
         {} as never,
       )) as string
       expect(result).toContain("Failed to read article")
     })
   })
 
-  describe("rh_dev_cheatsheet", () => {
-    it("returns cheatsheet results for matching topic", async () => {
-      const tools = await getConfiguredTools()
-      const result = (await tools.rh_dev_cheatsheet.execute(
-        { topic: "podman" },
-        {} as never,
-      )) as string
-      expect(result).toContain("Podman Cheatsheet")
-      expect(result).toContain("[CHEATSHEET]")
+  describe("rh_dev_recent", () => {
+    it("returns recent articles from RSS feed", async () => {
+      mockFetchResponse(() => ({
+        ok: true,
+        text: `<?xml version="1.0"?>
+        <rss><channel>
+          <item>
+            <title><![CDATA[Getting Started with OpenShift]]></title>
+            <link>https://developers.redhat.com/articles/2026/openshift-start</link>
+            <pubDate>Mon, 01 Jan 2026 00:00:00 GMT</pubDate>
+            <dc:creator><![CDATA[Jane Doe]]></dc:creator>
+          </item>
+          <item>
+            <title><![CDATA[Kubernetes Best Practices]]></title>
+            <link>https://developers.redhat.com/articles/2026/k8s-practices</link>
+            <pubDate>Tue, 02 Jan 2026 00:00:00 GMT</pubDate>
+          </item>
+        </channel></rss>`,
+      }))
+      const tools = await getTools()
+      const result = (await tools.rh_dev_recent.execute({}, {} as never)) as string
+      expect(result).toContain("Recent Red Hat developer articles")
+      expect(result).toContain("Getting Started with OpenShift")
+      expect(result).toContain("Kubernetes Best Practices")
+      expect(result).toContain("Jane Doe")
     })
 
-    it("returns no results when no cheatsheets match", async () => {
-      const tools = await getConfiguredTools()
-      const result = (await tools.rh_dev_cheatsheet.execute(
-        { topic: "nonexistent" },
-        {} as never,
-      )) as string
-      expect(result).toContain("No results found")
-    })
-  })
-
-  describe("rh_dev_learning_path", () => {
-    it("returns learning path results for matching topic", async () => {
-      const tools = await getConfiguredTools()
-      const result = (await tools.rh_dev_learning_path.execute(
-        { topic: "kubernetes" },
-        {} as never,
-      )) as string
-      expect(result).toContain("Kubernetes Learning Path")
-      expect(result).toContain("[LEARNING PATH]")
+    it("respects limit parameter", async () => {
+      mockFetchResponse(() => ({
+        ok: true,
+        text: `<?xml version="1.0"?>
+        <rss><channel>
+          <item><title>Article 1</title><link>https://example.com/1</link></item>
+          <item><title>Article 2</title><link>https://example.com/2</link></item>
+          <item><title>Article 3</title><link>https://example.com/3</link></item>
+        </channel></rss>`,
+      }))
+      const tools = await getTools()
+      const result = (await tools.rh_dev_recent.execute({ limit: 1 }, {} as never)) as string
+      expect(result).toContain("Article 1")
+      expect(result).not.toContain("Article 2")
     })
 
-    it("returns no results when no learning paths match", async () => {
-      const tools = await getConfiguredTools()
-      const result = (await tools.rh_dev_learning_path.execute(
-        { topic: "nonexistent" },
-        {} as never,
-      )) as string
-      expect(result).toContain("No results found")
-    })
-  })
-
-  describe("system transform hook", () => {
-    it("injects framework context when detected", async () => {
-      const shell = createMockShell([
-        { match: "ls -1", output: "pom.xml\nsrc\nREADME.md" },
-      ])
-      const input = createMockInput(shell)
-      const hooks = await plugin.server(input, { contentPath: tempDir })
-
-      const sessionStart = hooks["session.start"] as (
-        event: unknown,
-        output: unknown,
-      ) => Promise<void>
-      await sessionStart({}, {})
-
-      const transform = hooks["experimental.chat.system.transform"] as (
-        event: unknown,
-        output: { system: string[] },
-      ) => Promise<void>
-      const output = { system: [] as string[] }
-      await transform({}, output)
-
-      expect(output.system.length).toBe(1)
-      expect(output.system[0]).toContain("detected-framework: java")
-      expect(output.system[0]).toContain("<rh-dev-content>")
-    })
-
-    it("omits framework when not detected", async () => {
-      const shell = createMockShell([
-        { match: "ls -1", output: "README.md\nLICENSE" },
-      ])
-      const input = createMockInput(shell)
-      const hooks = await plugin.server(input, { contentPath: tempDir })
-
-      const sessionStart = hooks["session.start"] as (
-        event: unknown,
-        output: unknown,
-      ) => Promise<void>
-      await sessionStart({}, {})
-
-      const transform = hooks["experimental.chat.system.transform"] as (
-        event: unknown,
-        output: { system: string[] },
-      ) => Promise<void>
-      const output = { system: [] as string[] }
-      await transform({}, output)
-
-      expect(output.system[0]).not.toContain("detected-framework")
-    })
-
-    it("is not present when contentPath not configured", async () => {
-      const input = createMockInput()
-      const hooks = await plugin.server(input, undefined)
-      expect(hooks["experimental.chat.system.transform"]).toBeUndefined()
+    it("handles fetch errors gracefully", async () => {
+      mockFetchResponse(() => ({ ok: false, text: "Server Error" }))
+      const tools = await getTools()
+      const result = (await tools.rh_dev_recent.execute({}, {} as never)) as string
+      expect(result).toContain("Failed to fetch recent articles")
     })
   })
 })

@@ -41,7 +41,7 @@ async function getTools(): Promise<Record<string, ToolDefinition>> {
   return hooks.tool!
 }
 
-describe("tinycode-plugin-rh-notify", () => {
+describe("tinycode-plugin-notify", () => {
   describe("plugin loading", () => {
     it("registers a notify tool with correct name and description", async () => {
       const tools = await getTools()

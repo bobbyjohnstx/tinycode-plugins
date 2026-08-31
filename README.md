@@ -1,24 +1,34 @@
 # tinycode-plugins
 
-Red Hat product integration plugins for [tinycode](https://github.com/bobbyjohnstx/tinycode), a local-LLM coding assistant.
+Plugins for [tinycode](https://github.com/bobbyjohnstx/tinycode), a local-LLM coding assistant.
 
-This monorepo contains 25 plugins organized by Red Hat product bundle, plus a shared utilities package. Each plugin extends tinycode with tools, providers, or lifecycle hooks that connect your coding session to Red Hat infrastructure.
+This monorepo contains **36 plugins** organized in two collections:
+
+- **`redhat/`** — 25 plugins for Red Hat product integration (OpenShift, RHACS, Ansible, RHOAI, Satellite, and more)
+- **`general/`** — 11 general-purpose plugins for security, developer experience, search, automation, and session management
+
+Plus a shared utilities package (`redhat/_shared`) used by the Red Hat plugins.
 
 ## Quick Start
 
 ```bash
 # Install a single plugin
-tinycode plugin add tinycode-plugin-ocp-cluster-ops
+tinycode plugin add tinycode-plugin-safety-net
 
-# Install a bundle for your role (see Suggested Bundles below)
+# Install a Red Hat bundle for your role (see Suggested Bundles below)
 tinycode plugin add tinycode-plugin-ocp-oauth tinycode-plugin-ocp-context tinycode-plugin-ocp-cluster-ops
+
+# Install a general-purpose starter set
+tinycode plugin add tinycode-plugin-log-sanitizer tinycode-plugin-safety-net tinycode-plugin-web-search tinycode-plugin-notify
 ```
 
 All plugins that connect to OpenShift-hosted services require `tinycode-plugin-ocp-oauth` — it provides the `oc login` auth hook that every OCP-connected plugin depends on. Authenticate once, and every plugin reuses the token.
 
 ## Configuration
 
-Most plugins work out of the box with `oc` already logged in. Plugins that connect to external APIs require options in your tinycode config:
+Most plugins work out of the box. Plugins that connect to external APIs require options in your tinycode config or environment variables:
+
+### Red Hat Plugins
 
 | Plugin | Required Options | Optional Options |
 |--------|-----------------|------------------|
@@ -37,9 +47,195 @@ Most plugins work out of the box with `oc` already logged in. Plugins that conne
 | satellite-lightspeed | `satelliteUrl` | `token` |
 | rhdp-provisioner | `consoleOfflineToken` | `rhdpApiUrl` |
 
-Plugins not listed above require no configuration. When a plugin with optional configuration is used without it, the unconfigured tools return a helpful message explaining what to set.
+### General Plugins
 
-## Plugins
+| Plugin | Environment Variables | Notes |
+|--------|----------------------|-------|
+| pilot | `GITEA_URL` (default: `http://localhost:3000`), `GITEA_TOKEN` (required) | Token needs repo/issues scope |
+| command-inject | `COMMAND_INJECT_DIR` (required) | Path to directory of executable scripts |
+| notify | `NTFY_TOPIC` (optional) | Enables push notifications via ntfy.sh |
+| telemetry | `TELEMETRY_DB` (optional) | Default: `~/.tinycode/telemetry.db` |
+| handoff | `HANDOFF_DIR` (optional) | Default: `~/.tinycode/handoff` |
+| snippets | `SNIPPETS_DIR` (optional) | Default: `~/.tinycode/snippets` |
+| context-pruning | `CONTEXT_PRUNE_THRESHOLD` (optional) | Messages before outputs are considered stale (default: 20) |
+
+Plugins not listed above require no configuration.
+
+---
+
+## General Plugins
+
+General-purpose plugins that work with any tinycode setup — no Red Hat infrastructure required.
+
+### Security
+
+| Package | Description | Hooks |
+|---------|-------------|-------|
+| **tinycode-plugin-log-sanitizer** | Redacts secrets and sensitive data from tool outputs before they reach the LLM context. | `tool.execute.after` |
+| **tinycode-plugin-safety-net** | Blocks dangerous shell commands — `rm -rf /`, `git push --force main`, `kubectl delete namespace` — before execution. | `permission.ask` |
+
+#### Log Sanitizer
+
+Enterprise ops teams paste cluster logs constantly — sensitive data leaking into LLM context is a real risk. The log sanitizer intercepts every tool output via `tool.execute.after` and applies regex-based redaction rules in priority order:
+
+1. PEM private key blocks
+2. API key prefixes — OpenAI (`sk-proj-`/`sk-live-`), GitHub (`ghs_`/`ghp_`), AWS (`AKIA`), Slack (`xoxb-`/`xoxp-`)
+3. Bearer tokens (via lookbehind pattern)
+4. High-entropy catch-all — 40+ character strings with mixed character classes
+
+Matches are replaced with `[REDACTED:<type>]`. Already-redacted strings and plain words are skipped.
+
+**Why use it:** Prevents accidental secret exposure in terminal output, logs, and LLM context. Zero configuration, zero performance overhead — just install and forget.
+
+#### Safety Net
+
+Intercepts `permission.ask` for `bash`-type permissions and checks command patterns against block rules covering three categories:
+
+- **Filesystem destructive** — `rm -rf /`, `mkfs`, `dd` to block device, `chmod -R 777 /`, fork bombs
+- **Kubernetes/OCP destructive** — `kubectl/oc delete namespace/project/node`, `helm uninstall` in kube-system
+- **Git destructive** — `git push --force main/master`, `git reset --hard main/master`
+
+Sets `output.status = "deny"` to block matching commands. Scoped paths like `./build` are allowed; only root/home/system targets are blocked.
+
+**Why use it:** Critical safety layer when tinycode operates against real clusters or production repositories. Catches destructive commands before they execute, even if the LLM confidently suggests them.
+
+### Developer Experience
+
+| Package | Description | Hooks |
+|---------|-------------|-------|
+| **tinycode-plugin-context-pruning** | Prunes stale and duplicate tool outputs from conversation context to optimize token usage. | `experimental.chat.messages.transform` |
+| **tinycode-plugin-handoff** | Cross-session context handoff — saves goals, decisions, open tasks, and modified files for the next session. | `session.start`, `session.end`, `system.transform`, `tool` (1) |
+| **tinycode-plugin-notify** | Desktop and push notifications when long-running tasks complete. | `tool` (1) |
+| **tinycode-plugin-command-inject** | Auto-discovers executable scripts in a directory and registers each as a callable tool. | `tool` (dynamic) |
+| **tinycode-plugin-snippets** | YAML template library for Kubernetes/OpenShift resources with variable substitution. | `tool` (2) |
+| **tinycode-plugin-code-review** | Git diff viewer formatted for AI-assisted code review. | `tool` (2) |
+| **tinycode-plugin-telemetry** | Tool call telemetry with local SQLite persistence and reporting. | `session.start`, `session.end`, `tool.execute.after`, `tool` (2) |
+
+#### Context Pruning
+
+Critical for local LLMs with 8k-32k context windows where every token matters. On each message transform pass, the plugin:
+
+1. Creates a deterministic key from `{tool, input}` (sorted JSON.stringify) for each completed tool call
+2. Identifies duplicate calls (same tool + same input) and replaces older outputs with `[pruned: ... — superseded by more recent call]`
+3. Prunes outputs older than the configurable threshold with `[pruned: ... — older than threshold]`
+4. Always preserves the most recent invocation of each unique tool+input pair
+
+**Why use it:** Keeps the LLM focused on current information in long sessions. A single `ocp_get_resources` call can produce hundreds of tokens of output — when called 5 times, only the latest matters.
+
+#### Handoff
+
+Enables seamless session continuation when context runs out or you start a new session:
+
+- **`session.start`** — Loads the most recent handoff state from `HANDOFF_DIR`
+- **`experimental.chat.system.transform`** — Injects restored state into the system prompt as a `<previous-session>` block
+- **`handoff_save` tool** — Accumulates goal, decisions, open tasks, and files modified during the session
+- **`session.end`** — Writes accumulated state to `<sessionID>.json`
+
+**Why use it:** Local LLMs hit context limits faster than cloud models. Handoff captures the "why" (goals and decisions), not just the "what" (file diffs), so the next session starts with full context instead of cold.
+
+**Tools:**
+- `handoff_save` — Save session context for handoff to the next session
+
+#### Notify
+
+Sends a desktop notification via `osascript` on macOS or `notify-send` on Linux. If `NTFY_TOPIC` is set, also sends a push notification to `ntfy.sh/<topic>` for mobile alerts.
+
+**Why use it:** Walk away from a long-running cluster operation or build and get pinged when it finishes — on your desktop and your phone.
+
+**Tools:**
+- `notify` — Send a desktop notification and optional push notification
+
+#### Command Inject
+
+At plugin load time, reads `COMMAND_INJECT_DIR` and discovers all regular executable files. For each file, creates a tool named from the filename (lowercased, non-alphanumeric replaced with `_`). Descriptions are extracted from `# description:` or `// description:` comments in the first 5 lines.
+
+**Why use it:** Turn any shell script into an LLM-callable tool without writing plugin code. Drop a script into a directory and it becomes a tool.
+
+**Tools:** Dynamically generated — one tool per executable file in the configured directory.
+
+#### Snippets
+
+Merges 5 built-in Kubernetes/OpenShift templates with custom templates from `SNIPPETS_DIR`:
+
+| Built-in | Resource |
+|----------|----------|
+| `deployment` | Kubernetes Deployment |
+| `service` | Kubernetes Service |
+| `route` | OpenShift Route |
+| `configmap` | ConfigMap |
+| `pvc` | PersistentVolumeClaim |
+
+Templates use `{{variable}}` placeholders that are replaced with provided values. Unresolved variables are reported in the output. Custom templates (`.yaml`/`.yml` files) override built-ins by name.
+
+**Why use it:** Consistent, validated resource templates that the LLM can expand with project-specific values. Faster than generating YAML from scratch and less error-prone.
+
+**Tools:**
+- `snippet_list` — List available snippet templates with names and descriptions
+- `snippet_expand` — Expand a template by name, replacing `{{variable}}` placeholders with provided values
+
+#### Code Review
+
+Runs `git diff` via the plugin shell and formats the output for LLM analysis. Supports `ref` (e.g., `HEAD~3`, `main`), `path` (scope to file/directory), and `staged` (--cached) options. Full diffs are truncated at 10,000 chars to fit in context.
+
+**Why use it:** Structured diff retrieval that the LLM can analyze for correctness, security, performance, and style issues. The stat-only tool gives a quick overview before pulling the full diff.
+
+**Tools:**
+- `code_review` — Gather a git diff formatted for AI-assisted code review
+- `code_review_diff_stat` — Lightweight diff stat overview (files changed, insertions, deletions)
+
+#### Telemetry
+
+Passive tool-call tracking to local SQLite (`bun:sqlite` with WAL mode):
+
+- **`session.start`** — Inserts a session record
+- **`tool.execute.after`** — Buffers tool calls in memory (tool name, SHA-256 args hash, timestamp)
+- **`session.end`** — Flushes the buffer to SQLite in a single transaction, updates session end time and tool count
+
+**Why use it:** Understand your tool usage patterns — which tools get called most, how sessions compare, whether a new plugin is actually being used. All data stays local in `~/.tinycode/telemetry.db`.
+
+**Tools:**
+- `telemetry_report` — Aggregate summary: total sessions, total tool calls, top 10 tools, average calls per session
+- `telemetry_query` — Query tool call records filtered by tool name and recency (default: last 7 days)
+
+### Reference
+
+| Package | Description | Hooks |
+|---------|-------------|-------|
+| **tinycode-plugin-web-search** | Web search via DuckDuckGo with Red Hat knowledge base integration. No API key required. | `tool` (2) |
+
+#### Web Search
+
+Addresses the biggest limitation of local LLMs: stale or missing knowledge. Fetches the DuckDuckGo HTML endpoint, parses result links and snippets via regex. The `rh_kb_search` tool prepends `site:access.redhat.com` to scope results to Red Hat KB articles.
+
+**Why use it:** Gives the LLM the ability to look things up — error messages, API docs, configuration syntax — without leaving the session. No API key, no account, no rate limits.
+
+**Tools:**
+- `web_search` — Search the web via DuckDuckGo. Returns titles, URLs, and snippets
+- `rh_kb_search` — Search the Red Hat knowledge base (access.redhat.com) via DuckDuckGo
+
+### Automation
+
+| Package | Description | Hooks |
+|---------|-------------|-------|
+| **tinycode-plugin-pilot** | Gitea issue management — list, create, update, and comment on issues from the coding session. | `tool` (4) |
+
+#### Pilot
+
+Connects your local development workflow to your Gitea issue tracker via the REST API (`/api/v1/repos/{owner}/{repo}/issues`). Token-based auth via `GITEA_TOKEN`.
+
+**Why use it:** Read issue context, update status, and post comments without switching to the browser. Enables automated workflows where the LLM picks up tagged issues and reports progress back.
+
+**Tools:**
+- `gitea_issues_list` — List issues with optional state and label filters
+- `gitea_issue_create` — Create a new issue with title, body, and labels
+- `gitea_issue_update` — Update an existing issue (title, body, state)
+- `gitea_issue_comment` — Add a comment to an issue
+
+---
+
+## Red Hat Plugins
+
+Red Hat product integration plugins. All plugins that connect to OpenShift-hosted services require `tinycode-plugin-ocp-oauth`.
 
 ### OpenShift
 
@@ -241,21 +437,20 @@ Plugins not listed above require no configuration. When a plugin with optional c
 
 | Package | Description | Hooks |
 |---------|-------------|-------|
-| **tinycode-plugin-rh-dev-content** | Red Hat developer content search — articles, cheatsheets, learning paths from local content directory. Auto-detects project framework for relevant content hints. | `tool` (4), `session.start`, `system.transform` |
-| **tinycode-plugin-ecosystem-catalog** | Red Hat Ecosystem Catalog — search certified partners, operators, and hardware by keyword, category, or platform. | `tool` (3) |
+| **tinycode-plugin-rh-dev-content** | Red Hat developer content browser — browse articles by topic, read full articles, and get recent posts from the developers.redhat.com RSS feed. | `tool` (3) |
+| **tinycode-plugin-ecosystem-catalog** | Red Hat Ecosystem Catalog — search certified container images and operators via the Pyxis API, browse the catalog. | `tool` (3) |
 | **tinycode-plugin-rh-api-catalog** | Red Hat API catalog — browse 25 console.redhat.com APIs, fetch OpenAPI specs, list endpoints. Static catalog always works; live specs need auth. | `tool` (3) |
 | **tinycode-plugin-rhdp-provisioner** | RHDP demo environment provisioner — search catalog, provision environments with confirmation, check status, list active environments. | `tool` (4) |
 
 **Tools (rh-dev-content):**
-- `rh_dev_search` — Search indexed Red Hat developer articles by keyword with title, path, and snippet
-- `rh_dev_article` — Read full article content by file path from the developer content index
-- `rh_dev_cheatsheet` — Search Red Hat developer cheatsheets by topic
-- `rh_dev_learning_path` — Search Red Hat developer learning paths by topic
+- `rh_dev_search` — Browse Red Hat developer articles by topic (kubernetes, ai-ml, python, containers, security, devops, and more)
+- `rh_dev_article` — Read the full content of an article by URL
+- `rh_dev_recent` — Get recent articles from the developers.redhat.com RSS feed
 
 **Tools (ecosystem-catalog):**
-- `ecosystem_search` — Search certified partners, operators, and hardware by keyword, category, or platform
-- `ecosystem_operator` — Get certified operator details (supported OCP versions, install method, certification status)
-- `ecosystem_hardware` — Search certified hardware (vendor, model, certification status, supported versions)
+- `ecosystem_search` — Search certified container images by repository name via the Pyxis API
+- `ecosystem_operator` — Search certified operators by package name with OCP version support
+- `ecosystem_browse` — Browse recent certified container images or operator bundles
 
 **Tools (rh-api-catalog):**
 - `rh_api_list` — Browse available console.redhat.com APIs with name, description, and version
@@ -268,9 +463,46 @@ Plugins not listed above require no configuration. When a plugin with optional c
 - `rhdp_status` — Check provisioning status of an environment
 - `rhdp_list_active` — List active demo environments with expiration
 
+---
+
 ## Suggested Bundles
 
 Mix and match plugins by role. Start with the ones marked **core**, add others as needed.
+
+### Essential (Every User)
+
+Safety, search, and notifications — useful regardless of role.
+
+```bash
+tinycode plugin add \
+  tinycode-plugin-log-sanitizer \     # redact secrets from tool outputs
+  tinycode-plugin-safety-net \        # block destructive commands
+  tinycode-plugin-web-search \        # look things up without leaving the session
+  tinycode-plugin-notify              # get pinged when tasks finish
+```
+
+### Local LLM Optimization
+
+For users running local models with limited context windows.
+
+```bash
+tinycode plugin add \
+  tinycode-plugin-context-pruning \   # core — prune stale tool outputs
+  tinycode-plugin-handoff \           # core — session continuity across context limits
+  tinycode-plugin-telemetry           # track tool usage and compare models
+```
+
+### Power User DevEx
+
+Scripting, templates, and code review for daily development.
+
+```bash
+tinycode plugin add \
+  tinycode-plugin-code-review \       # structured diffs for AI review
+  tinycode-plugin-command-inject \    # expose project scripts as tools
+  tinycode-plugin-snippets \          # K8s/OCP YAML templates
+  tinycode-plugin-pilot               # Gitea issue management
+```
 
 ### OpenShift Administrator
 
@@ -314,7 +546,8 @@ tinycode plugin add \
   tinycode-plugin-tekton \           # run CI pipelines
   tinycode-plugin-quay \             # inspect images and scan results
   tinycode-plugin-rhdh \             # look up services, APIs, and docs
-  tinycode-plugin-lightwell          # check dependencies for patches
+  tinycode-plugin-lightwell \        # check dependencies for patches
+  tinycode-plugin-code-review        # structured diffs for code review
 ```
 
 ### Security / Governance & Compliance
@@ -324,6 +557,8 @@ Audit-focused — image scanning, policy enforcement, supply chain verification,
 ```bash
 tinycode plugin add \
   tinycode-plugin-ocp-oauth \
+  tinycode-plugin-log-sanitizer \    # prevent secret leakage
+  tinycode-plugin-safety-net \       # block destructive commands
   tinycode-plugin-rhacs \            # core — image and deployment policy checks
   tinycode-plugin-lightwell \        # core — supply chain patch verification
   tinycode-plugin-container-linter \ # Containerfile best practices and UBI checks
@@ -376,49 +611,11 @@ Red Hat developer content, ecosystem catalog, and API discovery.
 
 ```bash
 tinycode plugin add \
-  tinycode-plugin-rh-dev-content \     # articles, cheatsheets, learning paths
-  tinycode-plugin-ecosystem-catalog \  # certified partners and operators
-  tinycode-plugin-rh-api-catalog \     # console.redhat.com API specs
-  tinycode-plugin-rhdp-provisioner     # provision demo environments
-```
-
-### Network Troubleshooting
-
-Cluster-level diagnostics with security policy context.
-
-```bash
-tinycode plugin add \
-  tinycode-plugin-ocp-oauth \
-  tinycode-plugin-ocp-context \
-  tinycode-plugin-ocp-cluster-ops \  # get pods, events, logs, describe
-  tinycode-plugin-rhacs              # security policy checks on network-related workloads
-```
-
-### Forensic Investigation
-
-Post-incident analysis — cluster state, violations, events, logs, and runtime baselines.
-
-```bash
-tinycode plugin add \
-  tinycode-plugin-ocp-oauth \
-  tinycode-plugin-ocp-context \
-  tinycode-plugin-ocp-cluster-ops \  # cluster state, events, pod logs
-  tinycode-plugin-rhacs \            # violations, risk scores, runtime baselines
-  tinycode-plugin-tekton \           # pipeline run history
-  tinycode-plugin-quay               # image manifest and vulnerability history
-```
-
-### Developer Onboarding
-
-New hire ramp-up — explore the catalog, read learning paths, spin up demo environments, discover APIs.
-
-```bash
-tinycode plugin add \
-  tinycode-plugin-rh-dev-content \     # articles, cheatsheets, learning paths
-  tinycode-plugin-rhdh \               # software catalog and TechDocs
+  tinycode-plugin-rh-dev-content \     # articles by topic, full article reader
+  tinycode-plugin-ecosystem-catalog \  # certified container images and operators
   tinycode-plugin-rh-api-catalog \     # console.redhat.com API specs
   tinycode-plugin-rhdp-provisioner \   # provision demo environments
-  tinycode-plugin-ecosystem-catalog    # certified partners and operators
+  tinycode-plugin-web-search           # general web search for everything else
 ```
 
 ### Incident Response / On-Call
@@ -432,46 +629,35 @@ tinycode plugin add \
   tinycode-plugin-ocp-cluster-ops \  # cluster state, events, pod logs
   tinycode-plugin-obs-metrics \      # PromQL queries and alert silencing
   tinycode-plugin-obs-logging \      # Loki logs and Tempo traces
-  tinycode-plugin-rhacs              # active violations and risk scores
+  tinycode-plugin-rhacs \            # active violations and risk scores
+  tinycode-plugin-notify             # get alerted when long queries finish
 ```
 
-### Migration to OpenShift
+### Developer Onboarding
 
-Teams moving workloads to OpenShift — container best practices, dependency checking, and cluster operations.
+New hire ramp-up — explore the catalog, read learning paths, spin up demo environments, discover APIs.
 
 ```bash
 tinycode plugin add \
-  tinycode-plugin-ocp-oauth \
-  tinycode-plugin-ocp-context \
-  tinycode-plugin-ocp-cluster-ops \    # deploy and verify on the target cluster
-  tinycode-plugin-container-linter \   # UBI base images and best practices
-  tinycode-plugin-lightwell \          # dependency patching for RHEL
-  tinycode-plugin-rhdh                 # discover existing services and APIs
+  tinycode-plugin-rh-dev-content \     # articles and learning content
+  tinycode-plugin-rhdh \               # software catalog and TechDocs
+  tinycode-plugin-rh-api-catalog \     # console.redhat.com API specs
+  tinycode-plugin-rhdp-provisioner \   # provision demo environments
+  tinycode-plugin-ecosystem-catalog \  # certified partners and operators
+  tinycode-plugin-web-search           # look up anything else
 ```
 
-### Day-2 Operations
-
-Ongoing operational maintenance across clusters and fleet.
-
-```bash
-tinycode plugin add \
-  tinycode-plugin-ocp-oauth \
-  tinycode-plugin-ocp-context \
-  tinycode-plugin-ocp-cluster-ops \        # core cluster operations
-  tinycode-plugin-obs-metrics \            # PromQL metrics and alerts
-  tinycode-plugin-obs-logging \            # logs, traces, network flows
-  tinycode-plugin-rhacm \                  # multi-cluster fleet view
-  tinycode-plugin-satellite-lightspeed     # RHEL host management
-```
+---
 
 ## Shared Package
 
-All plugins depend on `tinycode-plugin-redhat-shared`, which provides:
+All Red Hat plugins depend on `tinycode-plugin-redhat-shared`, which provides:
 
 - **OC Client** — typed wrapper around `oc` CLI (get, describe, logs, apply, raw)
 - **API Client** — HTTP client with token injection and 401 retry
 - **Console Auth** — SSO token exchange for console.redhat.com APIs
 - **PromQL Client** — Prometheus/Thanos query and alert management
+- **HTML Utilities** — HTML stripping for web scraping plugins
 - **Local Search Index** — file-based full-text search for offline content
 - **Containerfile Parser** — multi-stage Containerfile parsing and dependency extraction
 - **MLFlow Client** — MLFlow tracking server operations
@@ -485,54 +671,72 @@ All plugins depend on `tinycode-plugin-redhat-shared`, which provides:
 # Install dependencies
 bun install
 
-# Run all tests (~695 tests across 26 packages)
+# Run all tests (~853 tests across 54 packages)
 bun test --recursive
 
 # Type check all packages
 bun run typecheck
 
 # Run tests for a single plugin
+cd general/security/safety-net && bun test
 cd redhat/openshift/cluster-ops && bun test
 ```
 
 ### Project Structure
 
 ```
-redhat/
-  _shared/                    # Shared utilities (oc client, API client, auth, test utils)
-  openshift/
-    oauth/                    # tinycode-plugin-ocp-oauth
-    context-injection/        # tinycode-plugin-ocp-context
-    cluster-ops/              # tinycode-plugin-ocp-cluster-ops
-    obs-metrics/              # tinycode-plugin-obs-metrics
-    obs-logging/              # tinycode-plugin-obs-logging
+general/
   security/
-    rhacs/                    # tinycode-plugin-rhacs
-    lightwell/                # tinycode-plugin-lightwell
-    container-linter/         # tinycode-plugin-container-linter
+    log-sanitizer/                # tinycode-plugin-log-sanitizer
+    safety-net/                   # tinycode-plugin-safety-net
   devex/
-    tekton/                   # tinycode-plugin-tekton
-    quay/                     # tinycode-plugin-quay
-    rhdh/                     # tinycode-plugin-rhdh
-  automation/
-    aap-bridge/               # tinycode-plugin-aap-bridge
-    eda-events/               # tinycode-plugin-eda-events
-  fleet/
-    rhacm/                    # tinycode-plugin-rhacm
-  rhoai/
-    model-serving/            # tinycode-plugin-rhoai-models
-    experiment-tracker/       # tinycode-plugin-rhoai-experiments
-    mcp-bridge/               # tinycode-plugin-rhoai-mcp-bridge
-    mlflow-tools/             # tinycode-plugin-mlflow-tools
-    pipelines/                # tinycode-plugin-rhoai-pipelines
-    eval-trustyai/            # tinycode-plugin-rhoai-eval-trustyai
-  satellite/
-    lightspeed/               # tinycode-plugin-satellite-lightspeed
+    context-pruning/              # tinycode-plugin-context-pruning
+    handoff/                      # tinycode-plugin-handoff
+    notify/                       # tinycode-plugin-notify
+    command-inject/               # tinycode-plugin-command-inject
+    snippets/                     # tinycode-plugin-snippets
+    code-review/                  # tinycode-plugin-code-review
+    telemetry/                    # tinycode-plugin-telemetry
   reference/
-    dev-content/              # tinycode-plugin-rh-dev-content
-    ecosystem-catalog/        # tinycode-plugin-ecosystem-catalog
-    api-catalog/              # tinycode-plugin-rh-api-catalog
-    rhdp-provisioner/         # tinycode-plugin-rhdp-provisioner
+    web-search/                   # tinycode-plugin-web-search
+  automation/
+    pilot/                        # tinycode-plugin-pilot
+
+redhat/
+  _shared/                        # Shared utilities (oc client, API client, auth, test utils)
+  openshift/
+    oauth/                        # tinycode-plugin-ocp-oauth
+    context-injection/            # tinycode-plugin-ocp-context
+    cluster-ops/                  # tinycode-plugin-ocp-cluster-ops
+    obs-metrics/                  # tinycode-plugin-obs-metrics
+    obs-logging/                  # tinycode-plugin-obs-logging
+  security/
+    rhacs/                        # tinycode-plugin-rhacs
+    lightwell/                    # tinycode-plugin-lightwell
+    container-linter/             # tinycode-plugin-container-linter
+  devex/
+    tekton/                       # tinycode-plugin-tekton
+    quay/                         # tinycode-plugin-quay
+    rhdh/                         # tinycode-plugin-rhdh
+  automation/
+    aap-bridge/                   # tinycode-plugin-aap-bridge
+    eda-events/                   # tinycode-plugin-eda-events
+  fleet/
+    rhacm/                        # tinycode-plugin-rhacm
+  rhoai/
+    model-serving/                # tinycode-plugin-rhoai-models
+    experiment-tracker/            # tinycode-plugin-rhoai-experiments
+    mcp-bridge/                   # tinycode-plugin-rhoai-mcp-bridge
+    mlflow-tools/                 # tinycode-plugin-mlflow-tools
+    pipelines/                    # tinycode-plugin-rhoai-pipelines
+    eval-trustyai/                # tinycode-plugin-rhoai-eval-trustyai
+  satellite/
+    lightspeed/                   # tinycode-plugin-satellite-lightspeed
+  reference/
+    dev-content/                  # tinycode-plugin-rh-dev-content
+    ecosystem-catalog/            # tinycode-plugin-ecosystem-catalog
+    api-catalog/                  # tinycode-plugin-rh-api-catalog
+    rhdp-provisioner/             # tinycode-plugin-rhdp-provisioner
 ```
 
 ## License

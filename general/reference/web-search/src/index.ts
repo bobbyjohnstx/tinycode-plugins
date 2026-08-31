@@ -71,7 +71,7 @@ function createTools(): Record<string, ToolDefinition> {
           const res = await fetch(url, {
             headers: {
               Accept: "text/html",
-              "User-Agent": "tinycode-plugin-rh-web-search/0.1.0",
+              "User-Agent": "tinycode-plugin-web-search/0.1.0",
             },
           })
           if (!res.ok) {
@@ -104,7 +104,7 @@ function createTools(): Record<string, ToolDefinition> {
           const res = await fetch(url, {
             headers: {
               Accept: "text/html",
-              "User-Agent": "tinycode-plugin-rh-web-search/0.1.0",
+              "User-Agent": "tinycode-plugin-web-search/0.1.0",
             },
           })
           if (!res.ok) {
