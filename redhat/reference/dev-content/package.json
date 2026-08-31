@@ -13,6 +13,7 @@
     "tinycode-plugin": { "optional": true }
   },
   "dependencies": {
+    "tinycode-plugin-redhat-shared": "^0.1.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {

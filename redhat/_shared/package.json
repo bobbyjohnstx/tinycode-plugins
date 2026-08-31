@@ -13,7 +13,8 @@
     "./console-auth": "./src/console-auth.ts",
     "./local-search": "./src/local-search.ts",
     "./mlflow": "./src/mlflow.ts",
-    "./containerfile-parser": "./src/containerfile-parser.ts"
+    "./containerfile-parser": "./src/containerfile-parser.ts",
+    "./html": "./src/html.ts"
   },
   "dependencies": {
     "tinycode-plugin": "^1.18.0"

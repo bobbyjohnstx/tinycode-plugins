@@ -1,4 +1,5 @@
 import type { Hooks, PluginModule, ToolDefinition } from "tinycode-plugin"
+import { stripHtml } from "tinycode-plugin-redhat-shared/html"
 import { z } from "zod"
 
 const BASE_URL = "https://developers.redhat.com"
@@ -25,21 +26,6 @@ async function fetchHtml(url: string): Promise<string> {
     throw new Error(`HTTP ${res.status}: ${url}`)
   }
   return res.text()
-}
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
 }
 
 interface ArticleLink {
