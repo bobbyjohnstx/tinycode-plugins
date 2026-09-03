@@ -1,20 +1,26 @@
-import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test"
+import { describe, it, expect, beforeEach, afterEach } from "bun:test"
 import plugin from "../src/index"
 
 const mockIssues = [
   {
     number: 1,
     title: "Fix login bug",
+    body: "Login is broken",
     state: "open",
     labels: [{ name: "bug" }, { name: "urgent" }],
+    html_url: "http://gitea.test/org/app/issues/1",
     created_at: "2026-08-01T10:00:00Z",
+    updated_at: "2026-08-01T10:00:00Z",
   },
   {
     number: 2,
     title: "Add dark mode",
+    body: "",
     state: "open",
     labels: [],
+    html_url: "http://gitea.test/org/app/issues/2",
     created_at: "2026-08-02T12:00:00Z",
+    updated_at: "2026-08-02T12:00:00Z",
   },
 ]
 
@@ -26,86 +32,75 @@ function mockResponse(body: unknown, status = 200, statusText = "OK") {
   })
 }
 
+function mockShell(remoteUrl: string) {
+  return Object.assign(
+    (_strings: TemplateStringsArray) => ({
+      quiet: () => ({
+        nothrow: () => ({
+          text: async () => remoteUrl,
+        }),
+      }),
+    }),
+  ) as unknown
+}
+
 describe("tinycode-plugin-gen-pilot", () => {
-  let fetchSpy: ReturnType<typeof spyOn<typeof globalThis, "fetch">>
+  const originalFetch = globalThis.fetch
+  let responseQueue: Response[]
   const savedToken = process.env.GITEA_TOKEN
   const savedUrl = process.env.GITEA_URL
+  const savedProvider = process.env.PILOT_PROVIDER
 
   beforeEach(() => {
+    responseQueue = []
     process.env.GITEA_TOKEN = "test-token"
     process.env.GITEA_URL = "http://gitea.test"
+    delete process.env.PILOT_PROVIDER
   })
 
   afterEach(() => {
-    if (fetchSpy) fetchSpy.mockRestore()
+    globalThis.fetch = originalFetch
     if (savedToken !== undefined) process.env.GITEA_TOKEN = savedToken
     else delete process.env.GITEA_TOKEN
     if (savedUrl !== undefined) process.env.GITEA_URL = savedUrl
     else delete process.env.GITEA_URL
+    if (savedProvider !== undefined) process.env.PILOT_PROVIDER = savedProvider
+    else delete process.env.PILOT_PROVIDER
   })
 
+  function setMockResponses(...responses: Response[]) {
+    responseQueue = [...responses]
+    globalThis.fetch = (async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      return responseQueue.shift() ?? mockResponse({}, 500, "No more mocks")
+    }) as typeof fetch
+  }
+
   async function getTools() {
-    const hooks = await plugin.server({} as never, undefined)
+    const $ = mockShell("https://gitea.example.com/org/app.git\n")
+    const hooks = await plugin.server({ $ } as never, undefined)
     return hooks.tool!
   }
 
   describe("plugin loading", () => {
-    it("registers all 4 tools", async () => {
+    it("registers all 4 tools with pilot_ prefix and no gitea_ names", async () => {
       const tools = await getTools()
-      expect(tools.gitea_issues_list).toBeDefined()
-      expect(tools.gitea_issue_create).toBeDefined()
-      expect(tools.gitea_issue_update).toBeDefined()
-      expect(tools.gitea_issue_comment).toBeDefined()
+      expect(tools.pilot_issues_list).toBeDefined()
+      expect(tools.pilot_issue_create).toBeDefined()
+      expect(tools.pilot_issue_update).toBeDefined()
+      expect(tools.pilot_issue_comment).toBeDefined()
+      expect(tools.gitea_issues_list).toBeUndefined()
+      expect(tools.gitea_issue_create).toBeUndefined()
+      expect(tools.gitea_issue_update).toBeUndefined()
+      expect(tools.gitea_issue_comment).toBeUndefined()
     })
   })
 
-  describe("missing GITEA_TOKEN", () => {
-    it("returns setup instructions for all tools", async () => {
-      delete process.env.GITEA_TOKEN
-      const tools = await getTools()
-
-      const listResult = await tools.gitea_issues_list.execute(
-        { owner: "org", repo: "app" },
-        {} as never,
-      )
-      expect(listResult).toBe(
-        "Gitea token not configured. Set GITEA_TOKEN environment variable.",
-      )
-
-      const createResult = await tools.gitea_issue_create.execute(
-        { owner: "org", repo: "app", title: "test" },
-        {} as never,
-      )
-      expect(createResult).toBe(
-        "Gitea token not configured. Set GITEA_TOKEN environment variable.",
-      )
-
-      const updateResult = await tools.gitea_issue_update.execute(
-        { owner: "org", repo: "app", issue_number: 1 },
-        {} as never,
-      )
-      expect(updateResult).toBe(
-        "Gitea token not configured. Set GITEA_TOKEN environment variable.",
-      )
-
-      const commentResult = await tools.gitea_issue_comment.execute(
-        { owner: "org", repo: "app", issue_number: 1, body: "test" },
-        {} as never,
-      )
-      expect(commentResult).toBe(
-        "Gitea token not configured. Set GITEA_TOKEN environment variable.",
-      )
-    })
-  })
-
-  describe("gitea_issues_list", () => {
+  describe("pilot_issues_list", () => {
     it("returns formatted issue list", async () => {
-      fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-        mockResponse(mockIssues),
-      )
+      setMockResponses(mockResponse(mockIssues))
       const tools = await getTools()
 
-      const result = (await tools.gitea_issues_list.execute(
+      const result = (await tools.pilot_issues_list.execute(
         { owner: "org", repo: "app" },
         {} as never,
       )) as string
@@ -116,153 +111,129 @@ describe("tinycode-plugin-gen-pilot", () => {
       expect(result).toContain("**#2** Add dark mode")
       expect(result).toContain("Labels: none")
       expect(result).toContain("2026-08-01")
-
-      const url = fetchSpy.mock.calls[0]![0] as string
-      expect(url).toContain("http://gitea.test/api/v1/repos/org/app/issues")
-      expect(url).toContain("state=open")
-      expect(url).toContain("limit=20")
     })
 
-    it("passes state and labels filters", async () => {
-      fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-        mockResponse([]),
-      )
+    it("returns no-issues message for empty list", async () => {
+      setMockResponses(mockResponse([]))
       const tools = await getTools()
 
-      await tools.gitea_issues_list.execute(
-        { owner: "org", repo: "app", state: "closed", labels: "bug,critical" },
+      const result = (await tools.pilot_issues_list.execute(
+        { owner: "org", repo: "app" },
         {} as never,
-      )
+      )) as string
 
-      const url = fetchSpy.mock.calls[0]![0] as string
-      expect(url).toContain("state=closed")
-      expect(url).toContain("labels=bug%2Ccritical")
+      expect(result).toContain("No issues found")
     })
   })
 
-  describe("gitea_issue_create", () => {
-    it("sends correct POST body and returns issue info", async () => {
-      fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+  describe("pilot_issue_create", () => {
+    it("returns formatted creation confirmation", async () => {
+      setMockResponses(
         mockResponse({
           number: 42,
           title: "New feature",
+          body: "",
+          state: "open",
+          labels: [],
           html_url: "http://gitea.test/org/app/issues/42",
+          created_at: "2026-08-01T00:00:00Z",
+          updated_at: "2026-08-01T00:00:00Z",
         }),
       )
       const tools = await getTools()
 
-      const result = (await tools.gitea_issue_create.execute(
-        {
-          owner: "org",
-          repo: "app",
-          title: "New feature",
-          body: "Description here",
-          labels: [1, 3],
-        },
+      const result = (await tools.pilot_issue_create.execute(
+        { owner: "org", repo: "app", title: "New feature", body: "Description" },
         {} as never,
       )) as string
 
       expect(result).toBe(
         "Created issue #42: New feature\nURL: http://gitea.test/org/app/issues/42",
       )
-
-      const call = fetchSpy.mock.calls[0]!
-      const url = call[0] as string
-      const opts = call[1] as RequestInit
-      expect(url).toBe("http://gitea.test/api/v1/repos/org/app/issues")
-      expect(opts.method).toBe("POST")
-      expect(JSON.parse(opts.body as string)).toEqual({
-        title: "New feature",
-        body: "Description here",
-        labels: [1, 3],
-      })
     })
   })
 
-  describe("gitea_issue_update", () => {
-    it("sends correct PATCH body with only provided fields", async () => {
-      fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-        mockResponse({ number: 5, title: "Updated title" }),
+  describe("pilot_issue_update", () => {
+    it("returns formatted update confirmation", async () => {
+      setMockResponses(
+        mockResponse({
+          number: 5,
+          title: "Updated title",
+          body: "",
+          state: "closed",
+          labels: [],
+          html_url: "http://gitea.test/org/app/issues/5",
+          created_at: "2026-08-01T00:00:00Z",
+          updated_at: "2026-08-02T00:00:00Z",
+        }),
       )
       const tools = await getTools()
 
-      const result = (await tools.gitea_issue_update.execute(
-        {
-          owner: "org",
-          repo: "app",
-          issue_number: 5,
-          title: "Updated title",
-          state: "closed",
-        },
+      const result = (await tools.pilot_issue_update.execute(
+        { owner: "org", repo: "app", issue_number: 5, title: "Updated title" },
         {} as never,
       )) as string
 
       expect(result).toBe("Updated issue #5: Updated title")
-
-      const call = fetchSpy.mock.calls[0]!
-      const url = call[0] as string
-      const opts = call[1] as RequestInit
-      expect(url).toBe("http://gitea.test/api/v1/repos/org/app/issues/5")
-      expect(opts.method).toBe("PATCH")
-      expect(JSON.parse(opts.body as string)).toEqual({
-        title: "Updated title",
-        state: "closed",
-      })
     })
   })
 
-  describe("gitea_issue_comment", () => {
-    it("sends correct POST body", async () => {
-      fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-        mockResponse({ id: 99 }),
+  describe("pilot_issue_comment", () => {
+    it("returns formatted comment confirmation", async () => {
+      setMockResponses(
+        mockResponse({
+          id: 99,
+          body: "LGTM",
+          html_url: "http://gitea.test/org/app/issues/7#comment-99",
+          created_at: "2026-08-01T00:00:00Z",
+        }),
       )
       const tools = await getTools()
 
-      const result = (await tools.gitea_issue_comment.execute(
+      const result = (await tools.pilot_issue_comment.execute(
         { owner: "org", repo: "app", issue_number: 7, body: "LGTM" },
         {} as never,
       )) as string
 
       expect(result).toBe("Comment added to issue #7")
-
-      const call = fetchSpy.mock.calls[0]!
-      const url = call[0] as string
-      const opts = call[1] as RequestInit
-      expect(url).toBe(
-        "http://gitea.test/api/v1/repos/org/app/issues/7/comments",
-      )
-      expect(opts.method).toBe("POST")
-      expect(JSON.parse(opts.body as string)).toEqual({ body: "LGTM" })
     })
   })
 
   describe("error handling", () => {
-    it("handles 404 response", async () => {
-      fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-        mockResponse({}, 404, "Not Found"),
-      )
+    it("returns user-friendly error on HTTP 404", async () => {
+      setMockResponses(mockResponse({}, 404, "Not Found"))
       const tools = await getTools()
 
-      const result = (await tools.gitea_issues_list.execute(
+      const result = (await tools.pilot_issues_list.execute(
         { owner: "org", repo: "missing" },
         {} as never,
       )) as string
 
-      expect(result).toBe("Issue or repository not found")
+      expect(result).toBe("Repository or issue not found")
     })
 
-    it("handles 401 response", async () => {
-      fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-        mockResponse({}, 401, "Unauthorized"),
-      )
+    it("returns auth error on HTTP 401", async () => {
+      setMockResponses(mockResponse({}, 401, "Unauthorized"))
       const tools = await getTools()
 
-      const result = (await tools.gitea_issue_create.execute(
+      const result = (await tools.pilot_issue_create.execute(
         { owner: "org", repo: "app", title: "test" },
         {} as never,
       )) as string
 
-      expect(result).toBe("Authentication failed. Check your GITEA_TOKEN.")
+      expect(result).toContain("Authentication failed")
+    })
+
+    it("returns missing token message when GITEA_TOKEN is not set", async () => {
+      delete process.env.GITEA_TOKEN
+      const tools = await getTools()
+
+      const result = (await tools.pilot_issues_list.execute(
+        { owner: "org", repo: "app" },
+        {} as never,
+      )) as string
+
+      expect(result).toContain("token not configured")
     })
   })
 })

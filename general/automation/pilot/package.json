@@ -1,9 +1,9 @@
 {
   "name": "tinycode-plugin-gen-pilot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
-  "description": "Gitea issue management tools — list, create, update, and comment on issues",
+  "description": "Multi-platform issue management tools (Gitea, GitHub, GitLab) — list, create, update, and comment on issues",
   "engines": { "tinycode-plugin": ">=1" },
   "exports": { "./server": "./src/index.ts" },
   "peerDependencies": { "tinycode-plugin": "^1.18.0" },

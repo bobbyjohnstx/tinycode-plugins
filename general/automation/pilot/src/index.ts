@@ -1,48 +1,47 @@
-import type { Hooks, PluginModule, ToolDefinition } from "tinycode-plugin"
+import type {
+  Hooks,
+  PluginModule,
+  PluginInput,
+  PluginOptions,
+  ToolDefinition,
+} from "tinycode-plugin"
 import { z } from "zod"
+import type { IssueProvider, NormalizedIssue } from "./types.js"
+import { ProviderError } from "./types.js"
+import { createProvider } from "./provider-factory.js"
 
-const MISSING_TOKEN_MSG =
-  "Gitea token not configured. Set GITEA_TOKEN environment variable."
+function formatIssueList(
+  issues: NormalizedIssue[],
+  owner: string,
+  repo: string,
+  state: string,
+): string {
+  if (issues.length === 0) return `No issues found for ${owner}/${repo} (${state})`
 
-function getConfig() {
-  return {
-    url: process.env.GITEA_URL || "http://localhost:3000",
-    token: process.env.GITEA_TOKEN,
-  }
-}
-
-async function giteaFetch(
-  path: string,
-  options?: RequestInit,
-): Promise<Response> {
-  const { url, token } = getConfig()
-  return fetch(`${url}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `token ${token}`,
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
+  const lines = issues.map((issue, i) => {
+    const labels = issue.labels.join(", ") || "none"
+    const date = issue.created_at.split("T")[0]
+    return `${i + 1}. **#${issue.number}** ${issue.title} — ${issue.state} | Labels: ${labels} | Created: ${date}`
   })
+
+  return `## Issues for ${owner}/${repo} (${state})\n\n${lines.join("\n")}`
 }
 
-function handleError(response: Response): string {
-  if (response.status === 404) return "Issue or repository not found"
-  if (response.status === 401 || response.status === 403)
-    return "Authentication failed. Check your GITEA_TOKEN."
-  return `Gitea API error: ${response.status} ${response.statusText}`
+function handleProviderError(err: unknown): string {
+  if (err instanceof ProviderError) return err.message
+  return `Unexpected error: ${String(err)}`
 }
 
-function createTools(): Record<string, ToolDefinition> {
+function createTools(provider: IssueProvider): Record<string, ToolDefinition> {
   return {
-    gitea_issues_list: {
+    pilot_issues_list: {
       description:
-        "List issues in a Gitea repository with optional state and label filters",
+        "List issues in a repository with optional state and label filters",
       args: {
         owner: z.string().describe("Repository owner"),
         repo: z.string().describe("Repository name"),
         state: z
-          .enum(["open", "closed", "all"])
+          .enum(["open", "closed"])
           .optional()
           .describe("Issue state filter (default: open)"),
         labels: z
@@ -51,80 +50,66 @@ function createTools(): Record<string, ToolDefinition> {
           .describe("Comma-separated label filter"),
         page: z.number().optional().describe("Page number (default: 1)"),
       },
-      async execute(args) {
-        const { token } = getConfig()
-        if (!token) return MISSING_TOKEN_MSG
-
+      async execute(args: {
+        owner: string
+        repo: string
+        state?: "open" | "closed"
+        labels?: string
+        page?: number
+      }) {
         const state = args.state || "open"
-        const page = args.page || 1
-        const params = new URLSearchParams({
-          state,
-          page: String(page),
-          limit: "20",
-        })
-        if (args.labels) params.set("labels", args.labels)
-
-        const response = await giteaFetch(
-          `/api/v1/repos/${args.owner}/${args.repo}/issues?${params}`,
-        )
-        if (!response.ok) return handleError(response)
-
-        const issues = (await response.json()) as Array<{
-          number: number
-          title: string
-          state: string
-          labels: Array<{ name: string }>
-          created_at: string
-        }>
-
-        const lines = issues.map((issue, i) => {
-          const labels =
-            issue.labels.map((l) => l.name).join(", ") || "none"
-          const date = issue.created_at.split("T")[0]
-          return `${i + 1}. **#${issue.number}** ${issue.title} — ${issue.state} | Labels: ${labels} | Created: ${date}`
-        })
-
-        return `## Issues for ${args.owner}/${args.repo} (${state})\n\n${lines.join("\n")}`
+        try {
+          const issues = await provider.listIssues({
+            owner: args.owner,
+            repo: args.repo,
+            state,
+            labels: args.labels,
+            page: args.page,
+            limit: 20,
+          })
+          return formatIssueList(issues, args.owner, args.repo, state)
+        } catch (err) {
+          return handleProviderError(err)
+        }
       },
     },
 
-    gitea_issue_create: {
-      description: "Create a new issue in a Gitea repository",
+    pilot_issue_create: {
+      description: "Create a new issue in a repository",
       args: {
         owner: z.string().describe("Repository owner"),
         repo: z.string().describe("Repository name"),
         title: z.string().describe("Issue title"),
         body: z.string().optional().describe("Issue body"),
-        labels: z.array(z.number()).optional().describe("Label IDs"),
+        labels: z
+          .array(z.string())
+          .optional()
+          .describe("Label names"),
       },
-      async execute(args) {
-        const { token } = getConfig()
-        if (!token) return MISSING_TOKEN_MSG
-
-        const response = await giteaFetch(
-          `/api/v1/repos/${args.owner}/${args.repo}/issues`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              title: args.title,
-              body: args.body,
-              labels: args.labels,
-            }),
-          },
-        )
-        if (!response.ok) return handleError(response)
-
-        const issue = (await response.json()) as {
-          number: number
-          title: string
-          html_url: string
+      async execute(args: {
+        owner: string
+        repo: string
+        title: string
+        body?: string
+        labels?: string[]
+      }) {
+        try {
+          const issue = await provider.createIssue({
+            owner: args.owner,
+            repo: args.repo,
+            title: args.title,
+            body: args.body,
+            labels: args.labels,
+          })
+          return `Created issue #${issue.number}: ${issue.title}\nURL: ${issue.url}`
+        } catch (err) {
+          return handleProviderError(err)
         }
-        return `Created issue #${issue.number}: ${issue.title}\nURL: ${issue.html_url}`
       },
     },
 
-    gitea_issue_update: {
-      description: "Update an existing issue in a Gitea repository",
+    pilot_issue_update: {
+      description: "Update an existing issue in a repository",
       args: {
         owner: z.string().describe("Repository owner"),
         repo: z.string().describe("Repository name"),
@@ -136,61 +121,65 @@ function createTools(): Record<string, ToolDefinition> {
           .optional()
           .describe("New state"),
       },
-      async execute(args) {
-        const { token } = getConfig()
-        if (!token) return MISSING_TOKEN_MSG
-
-        const updates: Record<string, unknown> = {}
-        if (args.title !== undefined) updates.title = args.title
-        if (args.body !== undefined) updates.body = args.body
-        if (args.state !== undefined) updates.state = args.state
-
-        const response = await giteaFetch(
-          `/api/v1/repos/${args.owner}/${args.repo}/issues/${args.issue_number}`,
-          {
-            method: "PATCH",
-            body: JSON.stringify(updates),
-          },
-        )
-        if (!response.ok) return handleError(response)
-
-        const issue = (await response.json()) as {
-          number: number
-          title: string
+      async execute(args: {
+        owner: string
+        repo: string
+        issue_number: number
+        title?: string
+        body?: string
+        state?: "open" | "closed"
+      }) {
+        try {
+          const issue = await provider.updateIssue({
+            owner: args.owner,
+            repo: args.repo,
+            issueNumber: args.issue_number,
+            title: args.title,
+            body: args.body,
+            state: args.state,
+          })
+          return `Updated issue #${issue.number}: ${issue.title}`
+        } catch (err) {
+          return handleProviderError(err)
         }
-        return `Updated issue #${issue.number}: ${issue.title}`
       },
     },
 
-    gitea_issue_comment: {
-      description: "Add a comment to an issue in a Gitea repository",
+    pilot_issue_comment: {
+      description: "Add a comment to an issue in a repository",
       args: {
         owner: z.string().describe("Repository owner"),
         repo: z.string().describe("Repository name"),
         issue_number: z.number().describe("Issue number"),
         body: z.string().describe("Comment body"),
       },
-      async execute(args) {
-        const { token } = getConfig()
-        if (!token) return MISSING_TOKEN_MSG
-
-        const response = await giteaFetch(
-          `/api/v1/repos/${args.owner}/${args.repo}/issues/${args.issue_number}/comments`,
-          {
-            method: "POST",
-            body: JSON.stringify({ body: args.body }),
-          },
-        )
-        if (!response.ok) return handleError(response)
-
-        return `Comment added to issue #${args.issue_number}`
+      async execute(args: {
+        owner: string
+        repo: string
+        issue_number: number
+        body: string
+      }) {
+        try {
+          await provider.commentOnIssue({
+            owner: args.owner,
+            repo: args.repo,
+            issueNumber: args.issue_number,
+            body: args.body,
+          })
+          return `Comment added to issue #${args.issue_number}`
+        } catch (err) {
+          return handleProviderError(err)
+        }
       },
     },
   }
 }
 
 export default {
-  server: async (): Promise<Hooks> => ({
-    tool: createTools(),
-  }),
+  server: async (input: PluginInput, options?: PluginOptions): Promise<Hooks> => {
+    const provider = await createProvider(input.$)
+    return {
+      tool: createTools(provider),
+    }
+  },
 } satisfies PluginModule
