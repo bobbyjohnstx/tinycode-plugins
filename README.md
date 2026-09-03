@@ -78,7 +78,7 @@ General-purpose plugins that work with any tinycode setup — no Red Hat infrast
 
 #### Documents
 
-Three tools for office document handling — ported from [Slice](https://github.com/bobbyjohnstx/slice)'s document engine. Uses pure-JS libraries (no native dependencies).
+Three tools for office document handling. Uses pure-JS libraries (no native dependencies).
 
 **Supported formats:**
 

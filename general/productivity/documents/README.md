@@ -2,7 +2,7 @@
 
 Read, write, and convert office documents (Word, Excel, PowerPoint, PDF, CSV, text) from your tinycode session.
 
-Ported from [Slice](https://github.com/bobbyjohnstx/slice)'s document engine. All libraries are pure JavaScript — no native dependencies.
+All libraries are pure JavaScript — no native dependencies.
 
 ## Install
 
