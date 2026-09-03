@@ -2,6 +2,7 @@ import type { Hooks, PluginModule, ToolDefinition } from "tinycode-plugin"
 import { z } from "zod"
 import path from "node:path"
 import { readDocument } from "./reader.js"
+import { writeDocument } from "./writer.js"
 
 export function createTools(): Record<string, ToolDefinition> {
   return {
@@ -27,8 +28,19 @@ export function createTools(): Record<string, ToolDefinition> {
             "JSON string of operations array — each operation has a 'type' field plus format-specific parameters",
           ),
       },
-      async execute(args, context) {
-        return "Not yet implemented"
+      async execute(args: { path: string; operations: string }, context) {
+        const filePath = path.resolve(context.directory, args.path)
+        await context.ask({
+          permission: "documents.write",
+          patterns: [args.path],
+          always: [`documents.write:${path.extname(args.path)}`],
+          metadata: { path: args.path, operation: "write" },
+        })
+        const result = await writeDocument(filePath, args.operations)
+        return {
+          output: result.message,
+          metadata: { success: result.success, operationsApplied: result.operationsApplied },
+        }
       },
     },
     convert_document: {
