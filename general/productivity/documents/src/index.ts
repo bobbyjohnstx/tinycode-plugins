@@ -1,5 +1,7 @@
 import type { Hooks, PluginModule, ToolDefinition } from "tinycode-plugin"
 import { z } from "zod"
+import path from "node:path"
+import { readDocument } from "./reader.js"
 
 export function createTools(): Record<string, ToolDefinition> {
   return {
@@ -9,8 +11,9 @@ export function createTools(): Record<string, ToolDefinition> {
       args: {
         path: z.string().describe("Path to the document file to read"),
       },
-      async execute(args, context) {
-        return "Not yet implemented"
+      async execute(args: { path: string }, context) {
+        const filePath = path.resolve(context.directory, args.path)
+        return readDocument(filePath)
       },
     },
     write_document: {
