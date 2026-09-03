@@ -3,6 +3,7 @@ import { z } from "zod"
 import path from "node:path"
 import { readDocument } from "./reader.js"
 import { writeDocument } from "./writer.js"
+import { convertDocument } from "./converter.js"
 
 export function createTools(): Record<string, ToolDefinition> {
   return {
@@ -51,8 +52,19 @@ export function createTools(): Record<string, ToolDefinition> {
         output: z.string().describe("Path for the converted output file"),
         format: z.enum(["json", "markdown"]).describe("Output format"),
       },
-      async execute(args, context) {
-        return "Not yet implemented"
+      async execute(
+        args: { input: string; output: string; format: "json" | "markdown" },
+        context,
+      ) {
+        const inputPath = path.resolve(context.directory, args.input)
+        const outputPath = path.resolve(context.directory, args.output)
+        await context.ask({
+          permission: "documents.convert",
+          patterns: [args.input, args.output],
+          always: [`documents.convert:${args.format}`],
+          metadata: { input: args.input, output: args.output, format: args.format },
+        })
+        return convertDocument(inputPath, outputPath, args.format)
       },
     },
   }
