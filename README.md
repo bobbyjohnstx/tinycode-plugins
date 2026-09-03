@@ -2,10 +2,10 @@
 
 Plugins for [tinycode](https://github.com/bobbyjohnstx/tinycode), a local-LLM coding assistant.
 
-This monorepo contains **36 plugins** organized in two collections:
+This monorepo contains **37 plugins** organized in two collections:
 
 - **`redhat/`** — 25 plugins for Red Hat product integration (OpenShift, RHACS, Ansible, RHOAI, Satellite, and more)
-- **`general/`** — 11 general-purpose plugins for security, developer experience, search, automation, and session management
+- **`general/`** — 12 general-purpose plugins for security, developer experience, productivity, search, automation, and session management
 
 Plus a shared utilities package (`redhat/_shared`) used by the Red Hat plugins.
 
@@ -20,6 +20,9 @@ tinycode plugin add tinycode-plugin-ocp-oauth tinycode-plugin-ocp-context tinyco
 
 # Install a general-purpose starter set
 tinycode plugin add tinycode-plugin-gen-log-sanitizer tinycode-plugin-gen-safety-net tinycode-plugin-gen-web-search tinycode-plugin-gen-notify
+
+# Add office document support (Word, Excel, PowerPoint, PDF, CSV)
+tinycode plugin add tinycode-plugin-gen-documents
 ```
 
 All plugins that connect to OpenShift-hosted services require `tinycode-plugin-ocp-oauth` — it provides the `oc login` auth hook that every OCP-connected plugin depends on. Authenticate once, and every plugin reuses the token.
@@ -66,6 +69,36 @@ Plugins not listed above require no configuration.
 ## General Plugins
 
 General-purpose plugins that work with any tinycode setup — no Red Hat infrastructure required.
+
+### Productivity
+
+| Package | Description | Hooks |
+|---------|-------------|-------|
+| **tinycode-plugin-gen-documents** | Read, write, and convert office documents (Word, Excel, PowerPoint, PDF, CSV, text). | `tool` (3) |
+
+#### Documents
+
+Three tools for office document handling — ported from [Slice](https://github.com/bobbyjohnstx/slice)'s document engine. Uses pure-JS libraries (no native dependencies).
+
+**Supported formats:**
+
+| Format | Read | Write | Convert to JSON/Markdown |
+|--------|------|-------|--------------------------|
+| Word (.docx) | Paragraphs and tables in document order | `append_paragraph`, `replace_text`, `insert_after` | Structured `{ paragraphs, tables }` or Markdown |
+| Excel (.xlsx) | All sheets with `Row N: val \| val` format | `set_cell`, `append_row`, `set_column` | Header-keyed records or pipe-delimited tables |
+| PowerPoint (.pptx) | Slide text extraction | `add_slide` with title and content | — |
+| PDF | Page-by-page text extraction | `add_page`, `add_paragraph`, `add_text` | Pages array or `## Page N` Markdown |
+| CSV | Rows with encoding fallback (UTF-8 → latin-1) | `append_row`, `set_cell` | Records array or pipe-delimited table |
+| Text | Raw content with encoding fallback | `replace_content`, `append_text`, `replace_text` | — |
+
+Write operations use a JSON string of structured operations — the LLM passes `[{"type": "set_cell", "sheet": "Sheet1", "row": 1, "col": "A", "value": "Hello"}]` rather than generating binary formats. Supports create-or-modify: new files are created with proper structure, existing files are patched.
+
+**Why use it:** Office document manipulation is a common non-coding use case for local LLMs. Enterprise users working with spreadsheets, reports, and presentations can use tinycode for document workflows without switching tools.
+
+**Tools:**
+- `read_document` — Read and extract text content from office documents
+- `write_document` — Create or modify documents using JSON operations (permission-gated)
+- `convert_document` — Convert documents to JSON or Markdown format (permission-gated)
 
 ### Security
 
@@ -689,6 +722,8 @@ general/
   security/
     log-sanitizer/                # tinycode-plugin-gen-log-sanitizer
     safety-net/                   # tinycode-plugin-gen-safety-net
+  productivity/
+    documents/                    # tinycode-plugin-gen-documents
   devex/
     context-pruning/              # tinycode-plugin-gen-context-pruning
     handoff/                      # tinycode-plugin-gen-handoff
