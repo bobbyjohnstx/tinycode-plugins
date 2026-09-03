@@ -51,11 +51,9 @@ async function writeDocx(
 
   let existingText = ""
   let existingParagraphs: string[] = []
-  let fileExists = false
 
   try {
     const buffer = await readFile(filePath)
-    fileExists = true
     const mammoth = (await import("mammoth")).default
     const result = await mammoth.extractRawText({ buffer })
     existingText = result.value

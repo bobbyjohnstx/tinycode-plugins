@@ -71,7 +71,7 @@ export function createTools(): Record<string, ToolDefinition> {
 }
 
 export default {
-  server: async (): Promise<Hooks> => ({
+  server: async (_input, _options): Promise<Hooks> => ({
     tool: createTools(),
   }),
 } satisfies PluginModule
